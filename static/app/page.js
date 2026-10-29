@@ -2237,8 +2237,24 @@ export function build() {
     const paintInstr = () => {
       instrClear.hidden = !instr.value.trim();
     };
-    instr.oninput = () => { grow(); paintInstr(); };
-    instrClear.onclick = () => { instr.value = ""; grow(); paintInstr(); instr.focus(); };
+    // AUTO on: the comment saves itself once typing pauses (the next job takes it); update still saves all
+    const saved = el("span.asaved");
+    let saveT = 0;
+    instr.oninput = () => {
+      grow(); paintInstr();
+      if (!on) return;
+      clearTimeout(saveT);
+      saved.textContent = "";
+      saveT = setTimeout(async () => {
+        const text = instr.value;
+        try {
+          await autoPut({ comment: text }, t);
+          const w = JSON.parse(was); w[1] = text.trim(); was = JSON.stringify(w);
+          if (instr.value === text) saved.textContent = "saved";
+        } catch (e) { saved.textContent = `not saved: ${e.message}`; }
+      }, 900);
+    };
+    instrClear.onclick = () => { instr.value = ""; instr.oninput(); instr.focus(); };
 
     const why = (st.of || {})[t] || "";
     const status = on && why && !/queued a /.test(why) ? why : "";
@@ -2309,7 +2325,7 @@ export function build() {
     instr.rows = 3;
     host.replaceChildren(...(status ? [el("div.snote", { text: status })] : []),
       who.el, kindRow, el("div.akeeprow", {}, [keepRow]),
-      el("div.acomment.k-style", {}, [instr, el("div.acount.ainstrrow", {}, [instrClear])]),
+      el("div.acomment.k-style", {}, [instr, el("div.acount.ainstrrow", {}, [saved, instrClear])]),
       fold("order", "order:", "set", [], [crit, el("div.acount.acritrow", {}, [critClear]), orderBox], orderSum));
     paintOrder();
     paintInstr();
@@ -2318,7 +2334,7 @@ export function build() {
 
     let acted = false;
     const snap = () => JSON.stringify([norm(crit.value), instr.value.trim(), who.get(), who.model(), mode, keep.checked]);
-    const was = snap();
+    let was = snap();
     autoClosed = () => {
       if (acted) return;
 

@@ -1192,6 +1192,7 @@ span.qthumb { display:inline-block; background:var(--dip) }
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23111111' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.4 8.4l3 3 6.2-6.9'/%3E%3C/svg%3E") }
 .acomment { display:grid; gap:2px }
 .acomment .ainstrrow { display:flex; justify-content:flex-end }
+.acomment .asaved { flex:1; font-size:12px; color:var(--mut) }
 .acomment .ainstrclear { min-height:0; padding:2px 4px; border:0; background:none; color:var(--mut); font-size:12px;
                          text-decoration:underline; cursor:pointer }
 .asumt .asumv { flex:1; min-width:0; color:var(--mut); font-size:12.5px }

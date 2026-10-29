@@ -121,6 +121,18 @@ class AutoModel(unittest.TestCase):
         self.c = app.test_client()
         self.mid = A.cached_catalogue("claude")["models"][0]["id"]
 
+    def test_a_comment_alone_keeps_the_pass_a_criterion_starts_one(self):
+        from unittest import mock
+        from api import auto as AA
+        with (mock.patch.object(AA, "_auto_types", return_value=["tt"]),
+              mock.patch.object(AU, "settings", return_value={**AU.DEFAULTS, "agent": "claude",
+                                                              "tabs": {"tt": {**AU.TAB, "since": 5.0}}})):
+            self.assertEqual(self.c.put("/api/auto", json={"for": "tt", "comment": "slower"}).status_code, 200)
+            self.assertEqual(self.saved[-1]["tabs"]["tt"]["since"], 5.0)
+            self.assertEqual(self.saved[-1]["tabs"]["tt"]["comment"], "slower")
+            self.assertEqual(self.c.put("/api/auto", json={"for": "tt", "criterion": "slowest first"}).status_code, 200)
+            self.assertGreater(self.saved[-1]["tabs"]["tt"]["since"], 5.0)
+
     def test_a_runners_kick_makes_auto_look_now(self):
         from unittest import mock
         with mock.patch.object(AU, "kick") as kick:
