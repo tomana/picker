@@ -3,9 +3,9 @@
 ![The picker on a desktop: a tab of cards, each a short loop of a visual mode, with its votes](docs/screenshots/desktop.jpg)
 
 <p>
-<img src="docs/screenshots/phone_chroma_modes.jpg" width="32%" alt="The same tab on a phone, two columns">
-<img src="docs/screenshots/phone_hunch_sc.jpg" width="32%" alt="A sound tab: each card's voices as lanes">
-<img src="docs/screenshots/phone_sc_library.jpg" width="32%" alt="AUTO's list of what it made, each with an A/B player and votes">
+<img src="docs/screenshots/phone_chroma_modes.jpg" width="32%" alt="A picked tab on a phone, two columns">
+<img src="docs/screenshots/phone_hunch_sc.jpg" width="32%" alt="A hybrid tab of sound: each card's voices as lanes">
+<img src="docs/screenshots/phone_sc_library.jpg" width="32%" alt="A hybrid tab: each card a sample (A) and a voice made for it (B), with its score">
 </p>
 
 Asking agents for work in a chat is slow, because every request is typed; judging what comes back is fast. The picker
