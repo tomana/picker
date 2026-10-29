@@ -12,8 +12,9 @@ const KIND = {
 
 /* Steps may target the whole page or several parts; text resolves against the current tab. */
 export const STEPS = [
-  { key: "the picker", line: "What the picker is for.", pic: "picker", say: () => ["Agents make, you pick. Asking for things is slow and judging them is fast, so ",
-                                   "here the agents make many and you judge. This shows the page's parts, one at a time."] },
+  { key: "the picker", line: "What the picker is for.", pic: "picker", say: () => ["The picker is a tool for managing agents in an autoresearch loop: they make graphics, ",
+                                   "assets or code, and each result comes back as a card for the operator to judge. The next steps ",
+                                   "go through the page, one part at a time."] },
   { key: "tabs", line: "One tab per thing being made.", at: ".cardhead", say: ({ tab }) => [
       "One tab per thing being made, each of three kinds. ", B("picked"), ": you judge every card. ", B("hybrid"),
       ": a score sorts them, you choose. ", B("scored"), ": a number decides; you read the trail.",
