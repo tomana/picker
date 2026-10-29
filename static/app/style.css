@@ -1555,6 +1555,9 @@ span.qthumb { display:inline-block; background:var(--dip) }
 .walk .wk { display:flex; justify-content:space-between; font-size:12px; letter-spacing:.13em; text-transform:uppercase;
             color:var(--mut) }
 .walk .wt { font-size:16px; line-height:1.45; margin:10px 0 14px }
+.walk .wpic { display:flex; justify-content:center; margin:16px 0 4px; color:var(--fg) }
+.walk .wpic[hidden] { display:none }
+.walk .wpic svg { stroke-width:.9 }                /* the 16-grid glyph drawn large: a finer line */
 .walk .wt b { font-weight:600 }
 .walk .wnav { display:flex; gap:8px; align-items:center }
 .walk .wsp { flex:1 }
