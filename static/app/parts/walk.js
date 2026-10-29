@@ -12,7 +12,7 @@ const KIND = {
 
 /* Steps may target the whole page or several parts; text resolves against the current tab. */
 export const STEPS = [
-  { key: "the picker", line: "What the picker is for.", say: () => ["Agents make, you pick. Asking for things is slow and judging them is fast, so ",
+  { key: "the picker", line: "What the picker is for.", pic: "picker", say: () => ["Agents make, you pick. Asking for things is slow and judging them is fast, so ",
                                    "here the agents make many and you judge. This shows the page's parts, one at a time."] },
   { key: "tabs", line: "One tab per thing being made.", at: ".cardhead", say: ({ tab }) => [
       "One tab per thing being made, each of three kinds. ", B("picked"), ": you judge every card. ", B("hybrid"),
@@ -97,8 +97,9 @@ export function walk(ctx, at = 0, { end, steps: all = STEPS }) {
   const back = el("button.wbtn", { type: "button" }, [glyph("prev", 14), "back"]);
   const next = el("button.wbtn", { type: "button" });
   const skip = el("button.wskip", { type: "button", text: "skip" });
+  const pic = el("div.wpic");                       // a step's picture, when it has one
   const cap = el("div.wcap", { role: "dialog", "aria-live": "polite" },
-                 [el("div.wk", {}, [k, of]), say, el("div.wnav", {}, [skip, el("span.wsp"), back, next])]);
+                 [el("div.wk", {}, [k, of]), pic, say, el("div.wnav", {}, [skip, el("span.wsp"), back, next])]);
   const root = el("div.walk", {}, [dim, hole, cap]);
   document.body.append(root);
   let i = Math.max(0, Math.min(steps.length - 1, at)), last = "";
@@ -108,6 +109,8 @@ export function walk(ctx, at = 0, { end, steps: all = STEPS }) {
     k.textContent = s.key;
     of.textContent = `${i + 1} / ${steps.length}`;
     say.replaceChildren(...s.say(ctx));
+    pic.replaceChildren(...(s.pic ? [glyph(s.pic, 64)] : []));
+    pic.hidden = !s.pic;
     back.disabled = i === 0;
     if (i === steps.length - 1) next.replaceChildren("done"); else next.replaceChildren("next", glyph("next", 14));
     const ns = s.at && find(s.at);

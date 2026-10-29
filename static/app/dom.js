@@ -177,6 +177,9 @@ export function cardMedia(c, { w = 360 } = {}) {
 const GLYPH = {
   /* Draw pause marks rather than relying on Android emoji presentation. */
 
+  // the picker itself: a grid of four cards, apart enough for the cross between them to show
+  picker:  '<rect x="2.8" y="2.8" width="4.2" height="4.2"/><rect x="9" y="2.8" width="4.2" height="4.2"/>' +
+           '<rect x="2.8" y="9" width="4.2" height="4.2"/><rect x="9" y="9" width="4.2" height="4.2"/>',
   copy:    '<rect x="5.5" y="5.5" width="8" height="8" rx="1.2"/><path d="M10.5 5.5V3.7a1.2 1.2 0 0 0-1.2-1.2H3.7a1.2 1.2 0 0 0-1.2 1.2v5.6a1.2 1.2 0 0 0 1.2 1.2h1.8"/>',
 
   dup:     '<path d="M5.5 5.5V2.5h8v8h-3"/><rect x="2.5" y="5.5" width="8" height="8"/><path d="M6.5 7.8v3.4M4.8 9.5h3.4"/>',
