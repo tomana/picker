@@ -1,5 +1,13 @@
 # picker
 
+![The picker on a desktop: a tab of cards, each a short loop of a visual mode, with its votes](docs/screenshots/desktop.jpg)
+
+<p>
+<img src="docs/screenshots/phone_chroma_modes.jpg" width="32%" alt="The same tab on a phone, two columns">
+<img src="docs/screenshots/phone_hunch_sc.jpg" width="32%" alt="A sound tab: each card's voices as lanes">
+<img src="docs/screenshots/phone_sc_library.jpg" width="32%" alt="AUTO's list of what it made, each with an A/B player and votes">
+</p>
+
 Asking agents for work in a chat is slow, because every request is typed; judging what comes back is fast. The picker
 is a web page where agents' work arrives as cards (a picture, a video, a sound) and you judge it: vote, write what
 should change, and send a card back for a new version or a new idea. AUTO can do the asking for you, from the cards
