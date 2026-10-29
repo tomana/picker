@@ -91,8 +91,9 @@ def _put_auto(body: dict):
         for k in ("comment", "criterion"):
             if k in own and not isinstance(own[k], str):
                 return jsonify({"ok": False, "err": f"{k} is text"}), 400
-        # A new pass makes every tab card due again from this moment.
-        new["tabs"] = {**s["tabs"], t: AU.clean_tab({**AU.tab(s, t), **own, "since": time.time()})}
+        # A new pass makes every tab card due again from this moment; a comment alone only changes AUTO's words.
+        fresh = {} if set(own) == {"comment"} else {"since": time.time()}
+        new["tabs"] = {**s["tabs"], t: AU.clean_tab({**AU.tab(s, t), **own, **fresh})}
     known = set(_auto_types())
     if not isinstance(new["types"], list) or not set(new["types"]) <= known:
         return jsonify({"ok": False, "err": f"types are from {sorted(known)}"}), 400
