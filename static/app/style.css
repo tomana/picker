@@ -1110,7 +1110,7 @@ span.qthumb { display:inline-block; background:var(--dip) }
 
 .sheet.auto { z-index:60 }
 
-.sbody.auto { display:grid; gap:6px; align-content:start; padding:8px }
+.sbody.auto { display:grid; grid-template-columns:minmax(0, 1fr); gap:6px; align-content:start; padding:8px }   /* never wider than the sheet */
 .ahead { font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--mut);
          margin-top:2px; line-height:1.35 }
 
@@ -1126,7 +1126,7 @@ span.qthumb { display:inline-block; background:var(--dip) }
          background:var(--bg); border:1px solid var(--edge); padding:5px 8px; resize:vertical }
 .aorder { display:grid; gap:6px; justify-items:start }
 .aolist { margin:0; padding-left:22px; display:grid; gap:5px; width:100%; box-sizing:border-box }
-.aolist li { font-size:12.5px }
+.aolist li { font-size:12.5px; overflow-wrap:anywhere }      /* a long card name wraps */
 .aolist li.done { color:var(--mut) }
 .areport { width:100% }
 .areport summary { font-size:11px; color:var(--mut); cursor:pointer }
