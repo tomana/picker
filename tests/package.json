@@ -1,0 +1,8 @@
+{
+  "name": "picker-tests",
+  "private": true,
+  "type": "module",
+  "description": "The picker's browser checks. See README.md.",
+  "scripts": { "test": "node run.mjs" },
+  "dependencies": { "puppeteer-core": "^25.2.1" }
+}

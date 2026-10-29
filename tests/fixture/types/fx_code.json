@@ -1,0 +1,13 @@
+{
+ "type": "fx_code",
+ "label": "scored",
+ "kind": "scored",
+ "short": "code",
+ "about": "one try of a loop that makes a program start faster: the change, its median of five starts, and whether the loop kept it or reverted it",
+ "researcher": "queue_runner.py",
+ "start": ["uv", "run", "--with-editable", "{picker}", "--with", "pillow", "queue_runner.py", "--agent", "sweep"],
+ "agents": ["sweep", "claude"],
+ "program": "program.md",
+ "outputs": ["runs"],
+ "cards": "cards"
+}

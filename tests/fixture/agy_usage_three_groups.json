@@ -1,0 +1,32 @@
+{
+  "fixture_note": "Reported three-group usage shape; unrelated response fields omitted.",
+  "command": {
+    "data": {
+      "groups": [
+        {
+          "name": "Gemini Models",
+          "description": "Gemini Flash, Gemini Pro",
+          "buckets": [
+            {"window": "5h", "remaining_fraction": 1, "reset_time": "2026-10-28T19:00:00Z"},
+            {"window": "weekly", "remaining_fraction": 1, "reset_time": "2026-11-03T19:00:00Z"}
+          ]
+        },
+        {
+          "name": "Claude and GPT models",
+          "description": "Claude Opus, Claude Sonnet, GPT-OSS",
+          "buckets": [
+            {"window": "5h", "remaining_fraction": 0.38, "reset_time": "2026-10-28T19:30:00Z"},
+            {"window": "weekly", "remaining_fraction": 0.69, "reset_time": "2026-11-02T19:30:00Z"}
+          ]
+        },
+        {
+          "name": "Gemini 4 Argon",
+          "description": "For paid Pro plans, Argon quota is separate",
+          "buckets": [
+            {"window": "weekly", "remaining_fraction": 0, "reset_time": "2026-11-01T20:54:57Z"}
+          ]
+        }
+      ]
+    }
+  }
+}

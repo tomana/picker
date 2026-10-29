@@ -1,0 +1,35 @@
+{
+ "type": "fx_music",
+ "label": "shapes_music",
+ "kind": "hybrid",
+ "short": "music",
+ "name_prefix": "m",
+ "about": "the checks' made-up sounds: a few voices a version, each with its waveform, and the shapes that broke things (a bundle of takes, scoped cuts, a held version, lanes kept across versions)",
+ "researcher": "queue_runner.py",
+ "start": [
+  "uv",
+  "run",
+  "--with-editable",
+  "{picker}",
+  "queue_runner.py",
+  "--agent",
+  "claude"
+ ],
+ "agents": [
+  "claude",
+  "codex"
+ ],
+ "program": "program.md",
+ "outputs": [
+  "runs"
+ ],
+ "cards": "cards",
+ "capabilities": {
+  "auto": "revise",
+  "add": "idea",
+  "timeline": true,
+  "vote_count": true,
+  "images": false
+ },
+ "lanes": "by_agent"
+}

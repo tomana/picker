@@ -1,0 +1,5 @@
+runs/
+cards/
+logs/
+runner*.json
+__pycache__/

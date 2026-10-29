@@ -1,0 +1,60 @@
+{
+  "_doc": "Registry defaults are overridden by saved model and effort choices. Null effort uses the CLI default.",
+  "agents": {
+    "claude": {
+      "cli": "claude",
+      "label": "claude",
+      "_menu": "Each menu slot selects the newest model matching its first available pattern.",
+      "menu": [{"slot": "opus", "match": ["^claude-opus-"]}, {"slot": "fable", "match": ["^claude-fable-"]}],
+      "model": "opus",
+      "effort": null,
+      "models": ["fable", "opus", "sonnet", "haiku", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5-20251001"]
+    },
+    "codex": {
+      "cli": "codex",
+      "label": "codex",
+      "menu": [{"slot": "sol", "match": ["^gpt-[0-9.]+-sol$"]}, {"slot": "astra", "match": ["^gpt-[0-9.]+-astra$"]}],
+      "model": "gpt-6-astra",
+      "effort": null
+    },
+    "antigravity": {
+      "cli": "agy",
+      "label": "antigravity",
+      "menu": [{"slot": "flash", "match": ["^gemini-[0-9.]+-flash"]}, {"slot": "pro", "match": ["^gemini-[0-9.]+-pro"]},
+               {"slot": "argon", "match": ["^gemini-[0-9.]+-argon"]},
+               {"slot": "claude", "match": ["^claude-fable-", "^claude-opus-", "^claude-sonnet-"]},
+               {"slot": "gpt", "match": ["^gpt-"]}],
+      "model": "gemini-3.8-flash-high",
+      "effort": null
+    },
+    "fake": {
+      "cli": "fake",
+      "label": "fake",
+      "named_only": true,
+      "_doc": "The local example agent is deterministic and uses no quota. named_only restricts it to types that declare it.",
+      "model": null,
+      "effort": null
+    }
+  },
+  "efforts": {
+    "claude": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "agy": [
+      "low",
+      "medium",
+      "high",
+    "xhigh",
+    "max"
+    ]
+  },
+  "binaries": {
+    "claude": "claude",
+    "codex": "codex",
+    "agy": "agy"
+  }
+}

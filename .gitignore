@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local runtime data is configured outside the source tree.
+data/
+state/
+.cache/
+downloads/
+
+tests/node_modules/
+
+runner.lock
+runner.*.lock

@@ -1,0 +1,17 @@
+# The examples' picker: two tabs, `picked` (visual/) and `hybrid_two` (music/), each made by the fake agent — no agent
+# CLI, no login. From the picker's folder:
+#
+#     uv run server.py --config examples/picker.toml          then open http://127.0.0.1:8080
+#
+# Paths are relative to this file; what the picker and the examples write (data/, state/, .cache/, each example's
+# runs/ and cards/) stays here, and git ignores it.
+data      = "data"
+state     = "state"
+cache     = ".cache"
+agents    = "../agents.json"
+types     = ["visual/picker-type.json", "music/picker-type.json"]
+research  = "."
+
+[server]
+host = "127.0.0.1"
+port = 8080

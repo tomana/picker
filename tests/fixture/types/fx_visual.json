@@ -1,0 +1,30 @@
+{
+ "type": "fx_visual",
+ "label": "shapes_visual",
+ "kind": "picked",
+ "short": "visual",
+ "about": "the checks' made-up pictures: a still and a gif a version, and the shapes that broke things (a sparse stack, two renders of one version, media linked from the research)",
+ "researcher": "queue_runner.py",
+ "start": [
+  "uv",
+  "run",
+  "--with-editable",
+  "{picker}",
+  "queue_runner.py",
+  "--agent",
+  "claude"
+ ],
+ "agents": [
+  "claude",
+  "codex"
+ ],
+ "program": "program.md",
+ "outputs": [
+  "runs"
+ ],
+ "cards": "cards",
+ "capabilities": {
+  "auto": "revise",
+  "add": "idea"
+ }
+}

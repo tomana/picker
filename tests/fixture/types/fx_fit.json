@@ -1,0 +1,14 @@
+{
+ "type": "fx_fit",
+ "label": "hybrid",
+ "kind": "hybrid",
+ "short": "fits",
+ "about": "one drum hit fitted to a target: the target (A) and the fit (B) as one clip, with the fit's loss; the loop fits, and asks your ear where the loss is high or its two judges disagree",
+ "researcher": "queue_runner.py",
+ "start": ["uv", "run", "--with-editable", "{picker}", "queue_runner.py", "--agent", "sweep"],
+ "agents": ["sweep", "claude"],
+ "program": "program.md",
+ "outputs": ["runs"],
+ "cards": "cards",
+ "capabilities": {"ab": true, "need": true}
+}

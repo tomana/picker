@@ -1,0 +1,15 @@
+# Editable installs expose the runner SDK and the matching core implementation.
+# The server uses its own script metadata rather than project dependencies.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "picker"
+version = "0.0.0"
+description = "agents make, the human picks"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["picker"]

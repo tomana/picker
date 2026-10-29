@@ -1,0 +1,16 @@
+{
+ "type": "music",
+ "label": "hybrid_two",
+ "kind": "hybrid",
+ "short": "music",
+ "about": "a two-bar loop of a few voices written as notes: one card is one loop, each version a change to its notes or sounds; its score is how much the notes that sound together clash",
+ "researcher": "queue_runner.py",
+ "start": ["uv", "run", "--with-editable", "{picker}", "queue_runner.py"],
+ "agents": ["fake", "claude", "codex"],
+ "program": "program.md",
+ "plugin": "picker_plugin.py",
+ "outputs": ["runs"],
+ "cards": "cards",
+ "sync": {"argv": ["{python}", "sync.py"], "cwd": "."},
+ "capabilities": {"add": ["idea", "recording"], "upload": "/api/music/upload", "auto": "revise", "need": true}
+}

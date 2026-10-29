@@ -1,0 +1,15 @@
+{
+ "type": "visual",
+ "label": "picked",
+ "kind": "picked",
+ "short": "visual",
+ "about": "a moving pattern drawn from a few numbers: one card is one pattern, each version a change to its numbers",
+ "researcher": "queue_runner.py",
+ "start": ["uv", "run", "--with-editable", "{picker}", "queue_runner.py"],
+ "agents": ["fake", "claude", "codex"],
+ "program": "program.md",
+ "outputs": ["runs"],
+ "cards": "cards",
+ "sync": {"argv": ["{python}", "sync.py"], "cwd": "."},
+ "capabilities": {"add": "idea", "auto": "revise"}
+}

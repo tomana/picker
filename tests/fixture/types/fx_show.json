@@ -1,0 +1,36 @@
+{
+ "type": "fx_show",
+ "label": "picked_2",
+ "kind": "picked",
+ "short": "show",
+ "about": "a made-up show: a video, its poster and its timeline's picture",
+ "researcher": "queue_runner.py",
+ "start": [
+  "uv",
+  "run",
+  "--with-editable",
+  "{picker}",
+  "queue_runner.py",
+  "--agent",
+  "claude"
+ ],
+ "agents": [
+  "claude",
+  "codex"
+ ],
+ "program": "program.md",
+ "auto_placeholder": {
+  "title": "AUTO · fixture show",
+  "summary": "what the show sweep will do",
+  "description": "The show sweep will vary clip settings and produce new versions to judge. Not built yet — nothing runs.",
+  "tooltip": "AUTO: the show sweep is not built yet"
+ },
+ "outputs": [
+  "runs"
+ ],
+ "cards": "cards",
+ "capabilities": {
+  "auto": "placeholder",
+  "add": "idea"
+ }
+}
