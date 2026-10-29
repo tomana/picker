@@ -4,7 +4,7 @@
 
 <p>
 <img src="docs/screenshots/phone_chroma_modes.jpg" width="32%" alt="A picked tab on a phone, two columns">
-<img src="docs/screenshots/phone_hunch_sc.jpg" width="32%" alt="A hybrid tab of sound: each card's voices as lanes">
+<img src="docs/screenshots/phone_hunch_sc.jpg" width="32%" alt="A hybrid tab of sound: each card's voices as lanes, and a recording to make cards from">
 <img src="docs/screenshots/phone_sc_library.jpg" width="32%" alt="A hybrid tab: each card a sample (A) and a voice made for it (B), with its score">
 </p>
 
