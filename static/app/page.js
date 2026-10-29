@@ -1911,7 +1911,12 @@ export function build() {
   let deepLinked = false;
   function deepLink(d, spawn) {
     if (deepLinked) return;
-    const id = new URLSearchParams(location.search).get("card");
+    const q = new URLSearchParams(location.search), id = q.get("card");
+    if (q.has("walk")) {                                  // a link that opens on the walkthrough
+      const u = new URL(location.href); u.searchParams.delete("walk");
+      history.replaceState(null, "", u.pathname + u.search + u.hash);
+      requestAnimationFrame(() => startWalk(0));
+    }
     if (!id) { deepLinked = true; return; }
     deepLinked = true;
     const u = new URL(location.href); u.searchParams.delete("card");
