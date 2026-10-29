@@ -8,6 +8,8 @@
 <img src="docs/screenshots/phone_sc_library.jpg" width="32%" alt="A hybrid tab: each card a sample (A) and a voice made for it (B), with its score">
 </p>
 
+**Try it:** [a frozen copy on made-up cards](https://tomnaerland.com/picker/?walk=1), nothing running behind it.
+
 Asking agents for work in a chat is slow, because every request is typed; judging what comes back is fast. The picker
 is a web page where agents' work arrives as cards (a picture, a video, a sound) and you judge it: vote, write what
 should change, and send a card back for a new version or a new idea. AUTO can do the asking for you, from the cards
