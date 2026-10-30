@@ -1,0 +1,103 @@
+{
+ "name": "rec44 chords",
+ "why": "the riff's chords, D, Am and C, as four plain voices over its first two bars",
+ "tempo": 150,
+ "voices": [
+  {
+   "name": "top",
+   "wave": "sine",
+   "notes": [
+    74,
+    null,
+    74,
+    74,
+    null,
+    74,
+    74,
+    72,
+    72,
+    null,
+    72,
+    72,
+    null,
+    72,
+    72,
+    72
+   ],
+   "decay": 0.217,
+   "level": 0.15
+  },
+  {
+   "name": "mid",
+   "wave": "sine",
+   "notes": [
+    69,
+    null,
+    69,
+    69,
+    null,
+    69,
+    69,
+    69,
+    69,
+    null,
+    69,
+    69,
+    null,
+    69,
+    69,
+    67
+   ],
+   "decay": 0.217,
+   "level": 0.3
+  },
+  {
+   "name": "low",
+   "wave": "saw",
+   "notes": [
+    66,
+    null,
+    66,
+    66,
+    null,
+    66,
+    66,
+    64,
+    64,
+    null,
+    64,
+    64,
+    null,
+    64,
+    64,
+    64
+   ],
+   "decay": 0.217,
+   "level": 0.46
+  },
+  {
+   "name": "root",
+   "wave": "sine",
+   "notes": [
+    62,
+    null,
+    62,
+    62,
+    null,
+    62,
+    62,
+    60,
+    60,
+    null,
+    60,
+    60,
+    null,
+    60,
+    60,
+    60
+   ],
+   "decay": 0.217,
+   "level": 0.12
+  }
+ ]
+}

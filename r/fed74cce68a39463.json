@@ -1,0 +1,103 @@
+{
+ "name": "rec46 drone",
+ "why": "the drone as four plain voices over the recording's first eight seconds",
+ "tempo": 60,
+ "voices": [
+  {
+   "name": "sbass",
+   "wave": "sine",
+   "notes": [
+    36,
+    null,
+    36,
+    36,
+    36,
+    36,
+    36,
+    36,
+    36,
+    null,
+    36,
+    null,
+    36,
+    45,
+    null,
+    45
+   ],
+   "decay": 0.29,
+   "level": 0.45
+  },
+  {
+   "name": "shi",
+   "wave": "sine",
+   "notes": [
+    71,
+    null,
+    67,
+    71,
+    67,
+    74,
+    null,
+    72,
+    67,
+    67,
+    null,
+    67,
+    74,
+    null,
+    67,
+    69
+   ],
+   "decay": 0.29,
+   "level": 0.13
+  },
+  {
+   "name": "snoise",
+   "wave": "noise",
+   "notes": [
+    55,
+    55,
+    55,
+    55,
+    55,
+    55,
+    55,
+    55,
+    55,
+    55,
+    55,
+    null,
+    55,
+    null,
+    55,
+    55
+   ],
+   "decay": 0.29,
+   "level": 1
+  },
+  {
+   "name": "slo",
+   "wave": "sine",
+   "notes": [
+    null,
+    64,
+    64,
+    null,
+    62,
+    null,
+    64,
+    64,
+    null,
+    62,
+    60,
+    null,
+    62,
+    60,
+    64,
+    null
+   ],
+   "decay": 0.29,
+   "level": 0.13
+  }
+ ]
+}

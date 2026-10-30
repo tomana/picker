@@ -1,0 +1,86 @@
+<!doctype html>
+<!-- Standards mode is required for viewport-based card sizing. -->
+<meta charset="utf-8">
+<!-- Keep the layout viewport fixed when the keyboard opens so the card does not reflow. -->
+<!-- Omit viewport-fit=cover: changing safe-area insets would resize an open card. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=overlays-content">
+<!-- An inline favicon avoids an extra request and a misleading 404. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23111114'/%3E%3Cg fill='none' stroke='%23e8e8e8' stroke-width='1.4' stroke-linejoin='round'%3E%3Crect x='2.8' y='2.8' width='4.2' height='4.2'/%3E%3Crect x='9' y='2.8' width='4.2' height='4.2'/%3E%3Crect x='2.8' y='9' width='4.2' height='4.2'/%3E%3Crect x='9' y='9' width='4.2' height='4.2'/%3E%3C/g%3E%3C/svg%3E">
+<title>picker</title>
+<script>
+  /* Start independent API reads before module loading; card prefetch follows the selected tab. */
+  window.pickerBoot = (() => {
+    const j = (u) => fetch(u, { cache: "no-store" }).then((r) => { if (!r.ok) throw new Error(`${u} → ${r.status}`); return r.json(); });
+    const types = j("/api/types"), prefs = j("/api/prefs").catch(() => ({}));
+    /* Load panel state early to avoid an incorrect initial toggle. */
+    const boot = { types, prefs, auto: j("/api/auto").catch(() => null), cardsType: null, cards: null };
+    boot.cards = Promise.all([types, prefs]).then(([{ types: ts }, p]) => {
+      const known = ts.map((t) => t.type), q = new URLSearchParams(location.search).get("tab");
+      const asked = (q ? [q] : Array.isArray(p.filters) ? p.filters : []).filter((x) => known.includes(x));
+      const order = [...(Array.isArray(p.tab_order) ? p.tab_order : []), ...known].filter((x) => known.includes(x));
+      const t = asked[0] || order[0];
+      if (!t) return null;
+      boot.cardsType = t;
+      return j(`/api/cards?type=${encodeURIComponent(t)}&limit=24`);
+    }).catch(() => null);
+    return boot;
+  })();
+</script>
+<style>
+  :root {
+    /* Keep this viewport fraction aligned with the grid's complementary padding. */
+    --gif-turn:.3;
+    /* Palette contrast floors: 4.5:1 for text and 3:1 for shapes. */
+    --bg:#111111; --dip:#0d0d0d; --ground:#1c1c1c;
+    --surface:#2a2a2a; --edge:#404040;
+    --fg:#ebebeb; --mut:#959595;
+    --ant:#d9b3a3; --ant-deep:#bc8674;
+    --oai:#7d96ce; --oai-deep:#5173bf;
+    --goog:#4e8e5f; --goog-deep:#3a6e4a;
+    --up:#5caf7f; --down:#c4787a;
+    /* Keep selection neutral so provider colors retain their own meaning. */
+    --accent:#ffffff;
+    /* Provider icons use caption colors; general controls stay neutral. */
+    --ico:#ececec;
+    --ico-ant:var(--ant-text); --ico-oai:var(--oai-text); --ico-goog:var(--goog-text);
+    /* Active controls invert; playback and votes retain semantic colors. */
+    --on:#ececec; --on-ink:#111111;
+    /* Multi-choice selection uses a ring; solid white is reserved for binary controls. */
+    --pick:#3a3a3a;
+    /* Share one running-state color across the panel and controls. */
+    --auto-on:#7fd18b;
+    /* Caption colors maintain at least 7:1 contrast against the background. */
+    --ant-text:#f2ad92; --ant-deep-text:#e89073;
+    --oai-text:#97b5f7; --oai-deep-text:#759cf0;
+    --goog-text:#6cd087;
+  }
+  * { box-sizing:border-box }
+  body { margin:0; min-height:100dvh; color:var(--fg); background:var(--bg);
+         font:14px/1.45 system-ui,-apple-system,sans-serif; -webkit-text-size-adjust:100% }
+
+  /* Keep minimal top padding unless the safe-area inset is larger. */
+  main { padding:max(4px, env(safe-area-inset-top)) 0 0 }
+</style>
+
+
+<nav class="band"></nav><script src="/static/band.js"></script>
+<main id="app"></main>
+
+<!-- Keep the stylesheet separate so derived root metrics can update without rebuilding CSS text. -->
+<link rel="stylesheet" href="/static/app/style.css">
+<!-- Preload the known module graph to avoid serial discovery before first paint. -->
+<link rel="modulepreload" href="/static/app/app.js">
+<link rel="modulepreload" href="/static/app/page.js">
+<link rel="modulepreload" href="/static/app/data.js">
+<link rel="modulepreload" href="/static/app/dom.js">
+<link rel="modulepreload" href="/static/app/parts/voice.js">
+<link rel="modulepreload" href="/static/app/parts/node.js">
+<link rel="modulepreload" href="/static/app/parts/cup.js">
+<!-- Preload remaining page parts for the same reason. -->
+<link rel="modulepreload" href="/static/app/parts/ab.js">
+<link rel="modulepreload" href="/static/app/parts/audit.js">
+<link rel="modulepreload" href="/static/app/parts/settings.js">
+<link rel="modulepreload" href="/static/app/parts/timeline.js">
+<link rel="modulepreload" href="/static/app/parts/trim.js">
+<link rel="modulepreload" href="/static/app/parts/walk.js">
+<script type="module" src="/static/app/app.js"></script>

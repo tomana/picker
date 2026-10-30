@@ -1,0 +1,79 @@
+{
+ "name": "rec30b buzz",
+ "why": "the buzz, the chirp and the hiss as three plain voices, the recording twice under them",
+ "tempo": 100,
+ "voices": [
+  {
+   "name": "buzz",
+   "wave": "saw",
+   "notes": [
+    44,
+    44,
+    44,
+    44,
+    44,
+    null,
+    null,
+    null,
+    44,
+    44,
+    44,
+    44,
+    44,
+    null,
+    null,
+    null
+   ],
+   "decay": 0.18,
+   "level": 1
+  },
+  {
+   "name": "hiss",
+   "wave": "noise",
+   "notes": [
+    60,
+    60,
+    60,
+    60,
+    60,
+    null,
+    null,
+    null,
+    60,
+    60,
+    60,
+    60,
+    60,
+    null,
+    null,
+    null
+   ],
+   "decay": 0.03,
+   "level": 0.1
+  },
+  {
+   "name": "chirp",
+   "wave": "sine",
+   "notes": [
+    null,
+    null,
+    null,
+    56,
+    64,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    51,
+    75,
+    null,
+    null,
+    null
+   ],
+   "decay": 0.12,
+   "level": 0.75
+  }
+ ]
+}
