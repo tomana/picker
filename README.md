@@ -3,9 +3,9 @@
 ![The picker on a desktop: a tab of cards, each a short loop of a visual mode, with its votes](docs/screenshots/desktop.jpg)
 
 <p>
-<img src="docs/screenshots/phone_chroma_modes.jpg" width="32%" alt="A picked tab on a phone, two columns">
-<img src="docs/screenshots/phone_hunch_sc.jpg" width="32%" alt="A hybrid tab of sound: each card's voices as lanes, and a recording to make cards from">
-<img src="docs/screenshots/phone_sc_library.jpg" width="32%" alt="A hybrid tab: each card a sample (A) and a voice made for it (B), with its score">
+<img src="docs/screenshots/phone_picked.jpg" width="32%" alt="A picked tab on a phone, two columns">
+<img src="docs/screenshots/phone_hybrid.jpg" width="32%" alt="A hybrid tab of sound: each card's voices as lanes, and a recording to make cards from">
+<img src="docs/screenshots/phone_hybrid_two.jpg" width="32%" alt="A hybrid tab: each card a sample (A) and a voice made for it (B), with its score">
 </p>
 
 **Try it:** [a frozen copy on made-up cards](https://tomnaerland.com/picker/?walk=1), nothing running behind it.

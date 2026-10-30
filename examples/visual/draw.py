@@ -24,7 +24,7 @@ def field(p: dict, t: float, n: int) -> np.ndarray:
 
 
 def orig01(v: np.ndarray) -> np.ndarray:
-    """chroma_rt's orig01: the hue wheel, saturation 0.85, value 220/255 — there it wraps with depth, here with v."""
+    """orig01: the hue wheel at saturation 0.85, value 220/255, wrapping with v."""
     h, s, val = (v % 1.0) * 6, 0.85, 220 / 255
     i, f = np.floor(h).astype(int) % 6, h - np.floor(h)
     p, q, t = val * (1 - s), val * (1 - s * f), val * (1 - s * (1 - f))
@@ -39,7 +39,7 @@ def orig01(v: np.ndarray) -> np.ndarray:
 
 def picture(p: dict, t: float, n: int) -> Image.Image:
     """The field through the colours, dark to light: two colours blend, more are stops along the way; "orig01" is
-    chroma_rt's hue wheel."""
+    the hue wheel."""
     v = (field(p, t, n) + 1) / 2
     if p["colors"] == "orig01":
         return Image.fromarray(orig01(v).astype(np.uint8), "RGB")
