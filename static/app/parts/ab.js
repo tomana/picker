@@ -4,9 +4,9 @@ import { el, thumb, playGlyphs } from "../dom.js";
 
 const fmt = (x) => (typeof x === "number" ? String(+x.toPrecision(4)) : String(x));
 
-/* A/B duration includes the reference and gap before the generated version. */
+/* The whole A/B: the version, the gap, then the reference. */
 export function abLength(ver) {
-  return (+ver.ab_at || 0) + (+ver.duration || 0);
+  return +ver.ab_dur || 0;
 }
 
 /* Use transport-owned segment state so all views agree on which half is playing. */
@@ -46,14 +46,14 @@ export function abBlock(c, ver, { controls = false, seg = null, stop = null, pla
     return el("div.abside", { style: `flex-grow:${(to - from).toFixed(3)}` }, [
       el("div.abslice", {}, [img]), el("div.abfoot", {}, [b, el("span.abtag", { text: letter })])]);
   };
-  const a = side("A", 0, bAt, 0, only ? null : Math.max(0, at - 0.05), only ? "the sample" : "the reference");
+  const a = side("A", 0, bAt, 0, only ? null : Math.max(0, at - 0.05), only ? "the sample" : "this version");
   const sc = ver.score;
   if (sc && sc.value != null)
     a.firstChild.append(el("span.abscore", { text: fmt(sc.value),
       title: `${sc.name || "score"} ${fmt(sc.value)} (${sc.lower_is_better === false ? "higher" : "lower"} is better)` }));
 
   if (only) a.firstChild.append(el("span.abnone", { text: "no SC voice yet" }));
-  block.append(el("div.abrow", {}, only ? [a] : [a, side("B", bAt, 100, at, null, "this version")]));
+  block.append(el("div.abrow", {}, only ? [a] : [a, side("B", bAt, 100, at, null, "the reference")]));
   /* The whole-file control belongs to the page transport so pause and scroll playback share state. */
 
   if (!controls) block.append(el("div.aball"));

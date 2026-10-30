@@ -56,7 +56,7 @@ type's id.
 | `panel` | a URL | the type's own panel in AUTO's place: an ES module its plugin serves, whose `mount(hooks)` returns `{el, pause, refresh, busy}` (for example, an audio player) |
 | `vote_count` | `true` | "7 / 18 voted" on the version row |
 | `images` | `false` | no image button on the open card |
-| `ab` | `true` | the A/B on the small and the open card (`static/app/parts/ab.js`): a version's `media.ab` (the reference, a gap, the version, one file) and its `still` on the same time axis, shown as two boxes split at `ab_at`, each with its slice of the picture and a ▶ that plays that half; a small card's bottom row plays the whole between the stack's ‹ ›, and the open card hangs ▶ A and ▶ B under − +. The version's score, measures, doubts and parameters show in the open card's text |
+| `ab` | `true` | the A/B on the small and the open card (`static/app/parts/ab.js`): a version's `media.ab` (the version, a gap, the reference, one file: the version is heard first) and its `still` on the same time axis, shown as two boxes split at `ab_at`, each with its slice of the picture and a ▶ that plays that half; a small card's bottom row plays the whole between the stack's ‹ ›, and the open card hangs ▶ A and ▶ B under − +. The version's score, measures, doubts and parameters show in the open card's text |
 | `need` | `true` | the tab is ordered by need, the cards that want the user's ear first (`core/signals.need`, from the versions' `score` and `doubts` and the votes; on the list, on a card's read and after a signal, so the open card's reasons follow a vote); a reload keeps the order on screen, so a vote doesn't move a card. For a hybrid tab |
 
 ## The runner

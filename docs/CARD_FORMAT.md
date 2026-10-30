@@ -59,7 +59,8 @@ update; readers use one format rather than live migrators.
 | `measures` | object, optional | its other numbers, by name, shown beside the score |
 | `doubts` | list of strings, optional | the research's own reasons the user's ear is wanted on it (two judges that disagree); each raises its need |
 | `params`, `params_doc` | objects, optional | the knobs it was made with, and per knob `{unit, what}`: shown in the open card |
-| `ab_at` | number, optional | where B starts in `media.ab`, in seconds |
+| `ab_at` | number, optional | where B (the reference) starts in `media.ab`, in seconds |
+| `ab_dur` | number, optional | the whole of `media.ab`, in seconds |
 | a type's own | | a sound type may use `method`, `settings`, `items` (takes, each `{id, name, label, parts}`), `face_item`; a show type may use `sections` (`{name, start, len}`); a fitted-sound type may use `family`, `variant`, `ab_gain_db`, `source_sample` |
 
 ## media
@@ -71,8 +72,8 @@ update; readers use one format rather than live migrators.
 | `gif` | a moving picture that plays by itself |
 | `video` | a moving picture with a play button |
 | `audio` | the version's mix |
-| `ab` | an A/B: the reference (A), a gap, the version (B), at one gain, as one file — its `still` then shows that file on the same time axis; `ab_at` says where B starts (a type with `capabilities.ab`) |
-| `reference` | what the version was made to match (the A of `ab`) |
+| `ab` | an A/B: the version (A), a gap, the reference (B), at one gain, as one file — its `still` then shows that file on the same time axis; `ab_at` says where B starts, `ab_dur` how long it is (a type with `capabilities.ab`) |
+| `reference` | what the version was made to match (the B of `ab`) |
 | a type's own | a visual type may use `views` (`[{slug, still, gif}]`, alternate renders selected by the `face` signal) or `scene`; a show type may use `show` (JSON) and `timeline` (a picture) |
 
 ## A part
