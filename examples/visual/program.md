@@ -17,7 +17,7 @@ One JSON file, `pattern.json`:
 | `twist` | how much they turn as they go out: −3 to 3 |
 | `warp` | how much they wobble: 0 to 1 |
 | `speed` | how fast they move: 0.25 to 2 |
-| `colors` | two colours, `["#1e3c78", "#dce6ff"]`: the dark and the light |
+| `colors` | two or more colours, dark to light, `["#050505", "#4a4a4a", "#f0f0f0"]` (two blend, more are stops along the way), or `"orig01"`: chroma_rt's hue wheel |
 
 ## How to make one
 

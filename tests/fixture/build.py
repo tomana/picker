@@ -17,27 +17,29 @@ import staircase  # noqa: E402
 T0 = 1790000000                      # All fixture timestamps share one epoch.
 RATE = 22050
 
+# Black and white, as the example's cards mostly are (operator, 2026-10-30: "more black and white"): a dark and a light.
+SITE = [((0, 0, 0), (255, 255, 255)), ((8, 8, 8), (200, 200, 200)), ((20, 20, 20), (240, 240, 240)),
+        ((0, 0, 0), (245, 242, 234)), ((5, 5, 5), (150, 150, 150)), ((30, 30, 30), (255, 255, 255)),
+        ((0, 0, 0), (220, 220, 220)), ((12, 12, 12), (235, 235, 235)), ((0, 0, 0), (190, 190, 190))]
 VISUAL = [   # id, label, versions, the colours it is drawn in
-    ("fxlat1", "lattice of slow rings", 3, ((40, 90, 160), (220, 230, 255))),
-    ("fxdun1", "dune ripple field", 2, ((150, 110, 60), (250, 220, 170))),
-    ("fxemb1", "ember drift", 1, ((120, 30, 20), (255, 170, 60))),
-    ("fxgrd1", "grid that breathes", 2, ((20, 110, 80), (180, 255, 210))),
-    ("fxmoi1", "moire of two fans", 1, ((70, 40, 120), (230, 200, 255))),
-    ("fxold1", "an older sketch", 1, ((60, 60, 60), (200, 200, 200))),          # archived
+    ("fxlat1", "lattice of slow rings", 3, SITE[0]),
+    ("fxdun1", "dune ripple field", 2, SITE[6]),
+    ("fxemb1", "ember drift", 1, SITE[3]),
+    ("fxgrd1", "grid that breathes", 2, SITE[1]),
+    ("fxmoi1", "moire of two fans", 1, SITE[4]),
+    ("fxold1", "an older sketch", 1, SITE[7]),          # archived
     # Keep enough cards to exercise grid overflow.
-    ("fxtid1", "tide lines", 1, ((10, 60, 90), (120, 220, 230))),
-    ("fxsnd1", "sand script", 1, ((110, 80, 40), (240, 210, 150))),
-    ("fxfrn1", "fern spiral", 2, ((20, 70, 30), (160, 230, 120))),
-    ("fxhaz1", "haze bands", 1, ((90, 90, 110), (220, 220, 240))),
-    ("fxkil1", "kiln glow", 1, ((100, 20, 10), (255, 140, 60))),
-    ("fxpol1", "pollen drift", 1, ((120, 110, 20), (250, 240, 140))),
+    ("fxtid1", "tide lines", 1, SITE[0]),
+    ("fxsnd1", "sand script", 1, SITE[5]),
+    ("fxfrn1", "fern spiral", 2, SITE[1]),
+    ("fxhaz1", "haze bands", 1, SITE[7]),
+    ("fxkil1", "kiln glow", 1, SITE[5]),
+    ("fxpol1", "pollen drift", 1, SITE[2]),
 ]
 # Keep a card fully visible below the header after scrolling.
 _WORDS = ["salt", "cloud", "wave", "ember", "frost", "moss", "dusk", "glass", "smoke", "rain", "silk", "ash",
           "copper", "ink", "fog", "slate"]
-VISUAL += [(f"fxv{k + 1:02d}", f"{w} study", 1,
-            ((40 + 13 * k % 120, 30 + 29 * k % 140, 60 + 41 * k % 150), (230 - 7 * k, 200 + 3 * k, 250 - 9 * k)))
-           for k, w in enumerate(_WORDS)]
+VISUAL += [(f"fxv{k + 1:02d}", f"{w} study", 1, SITE[k % len(SITE)]) for k, w in enumerate(_WORDS)]
 MUSIC = [    # id, name, label, versions, the voices' base pitches (Hz), seconds (v1; each later version 1 s more)
     # long enough to scrub and hand over (the playlist's checks want 10 s or more, the playhead's 15 s)
     ("fx0a1b2c3d4e", "glassbl", "glass bell drone", 3, (220.0, 330.0, 440.0), 11.0),
