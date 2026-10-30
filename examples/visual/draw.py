@@ -23,10 +23,31 @@ def field(p: dict, t: float, n: int) -> np.ndarray:
     return np.sin(2 * np.pi * p["count"] * r + round(p["twist"]) * a + ph + wob)    # a whole twist: no seam where it meets
 
 
+def orig01(v: np.ndarray) -> np.ndarray:
+    """chroma_rt's orig01: the hue wheel, saturation 0.85, value 220/255 — there it wraps with depth, here with v."""
+    h, s, val = (v % 1.0) * 6, 0.85, 220 / 255
+    i, f = np.floor(h).astype(int) % 6, h - np.floor(h)
+    p, q, t = val * (1 - s), val * (1 - s * f), val * (1 - s * (1 - f))
+    ch = [(val, t, p), (q, val, p), (p, val, t), (p, q, val), (t, p, val), (val, p, q)]
+    rgb = np.zeros(v.shape + (3,))
+    for k, c in enumerate(ch):
+        m = i == k
+        for j in range(3):
+            rgb[..., j][m] = (c[j][m] if np.ndim(c[j]) else c[j]) * 255
+    return rgb
+
+
 def picture(p: dict, t: float, n: int) -> Image.Image:
-    v = (field(p, t, n)[..., None] + 1) / 2
-    dark, light = _rgb(p["colors"][0]), _rgb(p["colors"][1])
-    return Image.fromarray((dark * (1 - v) + light * v).astype(np.uint8), "RGB")
+    """The field through the colours, dark to light: two colours blend, more are stops along the way; "orig01" is
+    chroma_rt's hue wheel."""
+    v = (field(p, t, n) + 1) / 2
+    if p["colors"] == "orig01":
+        return Image.fromarray(orig01(v).astype(np.uint8), "RGB")
+    stops = np.array([_rgb(c) for c in p["colors"]])
+    x = v * (len(stops) - 1)
+    i = np.clip(np.floor(x).astype(int), 0, len(stops) - 2)
+    f = (x - i)[..., None]
+    return Image.fromarray((stops[i] * (1 - f) + stops[i + 1] * f).astype(np.uint8), "RGB")
 
 
 def draw(p: dict, out: Path, frames: int = 20) -> dict:

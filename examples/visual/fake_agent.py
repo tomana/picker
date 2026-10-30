@@ -7,8 +7,11 @@ import sys
 from pathlib import Path
 
 SHAPES = ["rings", "bands", "spiral"]
-PALETTES = [["#1e3c78", "#dce6ff"], ["#3c1e10", "#ffc878"], ["#0f3c28", "#b4ffd2"], ["#28143c", "#e6c8ff"],
-            ["#101010", "#f0f0f0"], ["#3c0a14", "#ff9696"], ["#0a2832", "#78e6f0"], ["#323214", "#f0f096"]]
+# Mostly black and white, and chroma_rt's orig01: the hue wheel it colours depth with, the obelisk's look (operator,
+# 2026-10-30, of these cards: "the palette is a bit off", then "more black and white and orig01 gradient for the others").
+# A palette is colours from dark to light, or "orig01".
+PALETTES = [["#000000", "#ffffff"], ["#050505", "#4a4a4a", "#f0f0f0"], ["#000000", "#1d1d1d", "#d9d9d9"],
+            ["#000000", "#f5f2ea"], "orig01", "orig01"]
 WORDS = ["tide", "ember", "moss", "glass", "dune", "frost", "smoke", "silk", "slate", "fern", "kiln", "pollen"]
 
 
