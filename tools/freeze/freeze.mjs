@@ -44,8 +44,10 @@ const page = await browser.newPage();
 await page.setRequestInterception(true);
 const asked = new Set();
 page.on("request", (r) => {
-  const u = new URL(r.url());
-  if (u.origin === new URL(base).origin && (r.method() === "GET" || r.method() === "HEAD")) asked.add(u.pathname + u.search);
+  const u = new URL(r.url()), same = u.origin === new URL(base).origin;
+  if (same && (r.method() === "GET" || r.method() === "HEAD")) asked.add(u.pathname + u.search);
+  // pictures and sounds are noted here and fetched below: loading them all in one tab runs headless Chrome out of room
+  if (same && u.pathname.startsWith("/media/")) return r.respond({ status: 204, body: "" });
   return r.method() === "GET" || r.method() === "HEAD" ? r.continue()
     : r.respond({ status: 200, contentType: "application/json", body: "{}" });
 });
