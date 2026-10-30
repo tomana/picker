@@ -17,7 +17,7 @@ import staircase  # noqa: E402
 T0 = 1790000000                      # All fixture timestamps share one epoch.
 RATE = 22050
 
-# Black and white, as the example's cards mostly are (operator, 2026-10-30: "more black and white"): a dark and a light.
+# Black and white, as the example's cards mostly are: a dark and a light.
 SITE = [((0, 0, 0), (255, 255, 255)), ((8, 8, 8), (200, 200, 200)), ((20, 20, 20), (240, 240, 240)),
         ((0, 0, 0), (245, 242, 234)), ((5, 5, 5), (150, 150, 150)), ((30, 30, 30), (255, 255, 255)),
         ((0, 0, 0), (220, 220, 220)), ((12, 12, 12), (235, 235, 235)), ((0, 0, 0), (190, 190, 190))]
