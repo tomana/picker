@@ -77,7 +77,8 @@ def work(job: dict, report) -> None:
         # the fit loop's next try (fits_hybrid, the made-up picker's own): the last try's clip again, its loss a tenth
         # lower — made up, no sound is fitted
         v["media"] = {k: take(rel) for k, rel in last["media"].items()}
-        v.update(duration=last.get("duration"), ab_at=last.get("ab_at"), params=last.get("params") or {},
+        v.update(duration=last.get("duration"), ab_at=last.get("ab_at"), ab_dur=last.get("ab_dur"),
+                 params=last.get("params") or {},
                  score={**last["score"], "value": round(last["score"]["value"] * 0.9, 3)},
                  measures=last.get("measures") or {}, doubts=[], parts=[])
     elif ME["kind"] == "music":

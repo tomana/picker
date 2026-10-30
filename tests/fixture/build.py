@@ -209,14 +209,14 @@ def _fits(cards: Path, made: dict) -> None:
             rng = np.random.default_rng(600 + i * 10 + n)
             knobs = {k: v * (1 + loss * float(rng.uniform(-0.8, 0.8))) for k, v in DRUM[drum].items()}
             fit = _drum(drum, knobs, seed=700 + i * 10 + n)
-            ab = np.concatenate([target, np.zeros(int(GAP * RATE), np.float32), fit])
+            ab = np.concatenate([fit, np.zeros(int(GAP * RATE), np.float32), target])
             _mp3(home / "media" / f"v{n}.mp3", fit)
             _mp3(home / "media" / f"v{n}_ab.mp3", ab)
             _spectrogram(ab, home / "media" / f"v{n}_still.png")
             versions.append({
                 "n": n, "id": f"v{n}", "created": T0 + 120000 + i * 3600 + n * 600,
                 "rationale": f"{label}: the fit loop's try {n}", "agent": "fixture", "model": "none",
-                "duration": HIT, "ab_at": HIT + GAP,
+                "duration": HIT, "ab_at": HIT + GAP, "ab_dur": 2 * HIT + GAP,
                 "score": {"name": "loss", "value": loss, "lower_is_better": True, "group": drum},
                 "measures": {"spectrum": round(loss * 0.8, 3), "envelope": round(loss * 1.3, 3)},
                 "doubts": doubts if n == len(losses) else [],
