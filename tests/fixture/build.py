@@ -31,7 +31,7 @@ VISUAL = [   # id, label, versions, the colours it is drawn in
     # Keep enough cards to exercise grid overflow.
     ("fxtid1", "tide lines", 1, SITE[0]),
     ("fxsnd1", "sand script", 1, SITE[5]),
-    ("fxfrn1", "fern spiral", 2, SITE[1]),
+    ("fxfrn1", "fern bands", 2, SITE[1]),
     ("fxhaz1", "haze bands", 1, SITE[7]),
     ("fxkil1", "kiln glow", 1, SITE[5]),
     ("fxpol1", "pollen drift", 1, SITE[2]),

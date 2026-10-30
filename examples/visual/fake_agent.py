@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-SHAPES = ["rings", "bands", "spiral"]
+SHAPES = ["rings", "bands"]       # no spirals: draw.py still draws one an older card asks for
 # Mostly black and white, and "orig01", a hue wheel. A palette is colours from dark to light, or "orig01".
 PALETTES = [["#000000", "#ffffff"], ["#050505", "#4a4a4a", "#f0f0f0"], ["#000000", "#1d1d1d", "#d9d9d9"],
             ["#000000", "#f5f2ea"], "orig01", "orig01"]

@@ -11,8 +11,8 @@ from draw import draw
 from fake_agent import make
 
 HERE = Path(__file__).resolve().parent
-IDEAS = ["slow rings", "tide bands", "ember spiral", "moss rings", "glass bands", "dune spiral", "frost rings",
-         "silk bands", "smoke spiral", "slate rings", "fern spiral", "kiln bands"]
+IDEAS = ["slow rings", "tide bands", "ember bands", "moss rings", "glass bands", "dune bands", "frost rings",
+         "silk bands", "smoke rings", "slate rings", "fern bands", "kiln bands"]
 
 
 def seed(runs: Path, n: int = 8, t0: float = 1790000000) -> list[str]:
