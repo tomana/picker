@@ -438,6 +438,12 @@ export function build() {
     }
 
     onTypes = () => filters.filter((f) => f.on).map((f) => f.slug);
+    d.onArrangements = () => {
+      const tt = onTypes()[0];
+      if (!tt || !cap(tt, "timeline")) return;
+      tlAdopt((d.arrangements || []).filter((a) => a.type === tt), { type: tt, api: tlApi(tt, d) });
+      renderTimeline();
+    };
 
     /* ONE TAB AT A TIME: a tap shows that type alone, and the one that is on stays on.
        (`?tab=X` opens one for a page load without saving it.) */
@@ -1010,6 +1016,7 @@ export function build() {
       if (box) box.classList.toggle("noq", state.q.length === 0);
     };
     state.paintQueue = paint;
+    d.onQueue = () => { state.q = d.queue.map((x) => ({ ...x })); paint(); };
     const wrap = el("div.qscroll", {}, [arm]);
     wrap.append(scrollIndicator(arm, { inset: t.innerRadius }).el);
     wrap.append(plate);

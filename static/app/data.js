@@ -332,6 +332,8 @@ export async function load() {
   /* Only the newest request for each type may apply; remaining pages share the first page generation. */
 
   const gen = new Map(), heads = new Map();
+  // a reload's deltas apply while a type still pages: their own ticket, and the ids they removed kept out of later pages
+  const deltas = new Map(), gone = new Map();
   const take = (t) => { const g = (gen.get(t) || 0) + 1; gen.set(t, g); return g; };
   const firstOf = on.map(take);
 
@@ -390,21 +392,22 @@ export async function load() {
   const rest = (t, g, n) => {
     const p = pages(t, g, n);
     paging.set(t, p);
-    p.finally(() => { if (paging.get(t) === p) paging.delete(t); });
+    p.finally(() => { if (paging.get(t) === p) { paging.delete(t); gone.delete(t); } });
     return p;
   };
   const pages = async (t, g, n) => {
+    const head = heads.get(t);                     // the snapshot the first page came from, whatever reloads do meanwhile
     try {
       for (let more = 1; more > 0 && gen.get(t) === g;) {
-        const r = await fetch(`/api/cards?type=${encodeURIComponent(t)}&gen=${encodeURIComponent(heads.get(t))}`
+        const r = await fetch(`/api/cards?type=${encodeURIComponent(t)}&gen=${encodeURIComponent(head)}`
                               + `&skip=${n}&limit=${REST}`, { cache: "no-store" });
         if (gen.get(t) !== g) return;
         if (r.status === 410) { await whole(t); out.onCards(); return; }
         if (!r.ok) throw new Error(`→ ${r.status}`);
         const l = await r.json();
         if (gen.get(t) !== g) return;
-        const have = new Set(out.cards.filter((c) => c.type === t).map((c) => c.id));
-        out.cards.push(...l.cards.filter((c) => !have.has(c.id)));
+        const have = new Set(out.cards.filter((c) => c.type === t).map((c) => c.id)), out_ = gone.get(t);
+        out.cards.push(...l.cards.filter((c) => !have.has(c.id) && !(out_ && out_.has(c.id))));
         n += l.cards.length;
         more = l.more;
         out.onCards();
@@ -421,7 +424,7 @@ export async function load() {
     if (!live || live.usage.some((u) => u.unknown && !u.missing)) setTimeout(() => out.refreshUsage(), 10000);
     if (!live) return;
     out.usage = live.usage;
-    out.onUpdate();
+    if (out.onUsage) out.onUsage(); else out.onUpdate();     // late data updates its own part, not the whole page
   });
   /* Refresh usage in place without repainting open cards or disturbing scroll position. */
 
@@ -436,12 +439,12 @@ export async function load() {
   queueP.then((rows) => {
     if (!rows.length) return;
     out.queue.push(...rows);
-    out.onUpdate();
+    if (out.onQueue) out.onQueue(); else out.onUpdate();
   });
   arrP.then((rows) => {
     if (!rows.length) return;
     out.arrangements.push(...rows);
-    out.onUpdate();
+    if (out.onArrangements) out.onArrangements(); else out.onUpdate();
   });
 
   /* Reload explicit types from the caller; local filter state may differ from the loader snapshot. */
@@ -509,14 +512,15 @@ export async function load() {
   out.reload = async (types) => {
     const want = onTypes(types);
     await Promise.all(want.map(async (t) => {
-      if (paging.has(t)) await paging.get(t);
       const head = heads.get(t);
       if (!head || !fetched.has(t)) { await whole(t); return; }
-      const g = take(t);
+      const g = gen.get(t), d = (deltas.get(t) || 0) + 1;
+      deltas.set(t, d);
       const l = await j(`/api/cards?type=${encodeURIComponent(t)}&since=${encodeURIComponent(head)}`);
-      if (gen.get(t) !== g) return;
+      if (gen.get(t) !== g || deltas.get(t) !== d) return;
       if (l.full) { await whole(t); return; }
       changes(t, l);
+      if (paging.has(t)) { if (!gone.has(t)) gone.set(t, new Set()); for (const id of l.removed) gone.get(t).add(id); }
       heads.set(t, l.gen);
     }));
     want.forEach((t) => fetched.add(t));
