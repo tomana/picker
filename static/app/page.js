@@ -653,13 +653,18 @@ export function build() {
     const slices = { gen: 0, raf: 0 };
     const want = new Set();
     if (gridIO) { gridIO.near.disconnect(); gridIO.far.disconnect(); }
+    const screens = (v, dflt) => {
+      const n = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v));
+      return n > 0 ? n : dflt;
+    };
+    const AHEAD = screens("--grid-ahead", 3), KEEP = Math.max(AHEAD + 1, screens("--grid-keep", 5));
     const near = new IntersectionObserver((es) => {
       for (const e of es) if (e.isIntersecting) want.add(e.target); else want.delete(e.target);
       if (want.size) sliceSoon();
-    }, { rootMargin: "300% 0px 300% 0px" });
+    }, { rootMargin: `${AHEAD * 100}% 0px ${AHEAD * 100}% 0px` });
     const far = new IntersectionObserver((es) => {
       for (const e of es) if (!e.isIntersecting) evict(e.target);
-    }, { rootMargin: "500% 0px 500% 0px" });
+    }, { rootMargin: `${KEEP * 100}% 0px ${KEEP * 100}% 0px` });
     gridIO = { near, far };
 
     const slotOf = (c) => {

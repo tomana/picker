@@ -30,6 +30,9 @@
   :root {
     /* Keep this viewport fraction aligned with the grid's complementary padding. */
     --gif-turn:.3;
+    /* how many screens ahead the grid builds its cards (their pictures load then), and beyond which it drops them;
+       a 12,000 px/s fling at 4× slowed CPU showed no gap from one screen up (tests/fling.mjs) */
+    --grid-ahead:1.5; --grid-keep:4;
     /* Palette contrast floors: 4.5:1 for text and 3:1 for shapes. */
     --bg:#111111; --dip:#0d0d0d; --ground:#1c1c1c;
     --surface:#2a2a2a; --edge:#404040;

@@ -24,7 +24,7 @@ export function abBlock(c, ver, { controls = false, seg = null, stop = null, pla
 
   const side = (letter, from, to, play0, play1, what) => {
     const share = (to - from) / 100;
-    const img = el("img", { src: thumb(m.still, controls ? 1280 : 360), alt: "", loading: "lazy", draggable: "false",
+    const img = el("img", { src: thumb(m.still, controls ? 1280 : 360), alt: "", draggable: "false",
                             style: `width:${(100 / share).toFixed(3)}%;left:${(-from / share).toFixed(3)}%` });
     const b = el("button.abplay.no-swipe", { type: "button", title: `${letter}: ${what}`, "aria-label": `play ${letter}`,
                                              "data-ab": key, "data-seg": letter }, playGlyphs(controls ? 22 : 15));

@@ -155,7 +155,7 @@ export function cardMedia(c, { w = 360 } = {}) {
     const box = el("div.media.video", {
       style: "position:relative;aspect-ratio:1;background:#000000" });
 
-    box.append(el("img", { src: thumb(m.still || m.poster, w), alt: c.id, loading: "lazy",
+    box.append(el("img", { src: thumb(m.still || m.poster, w), alt: c.id,
       style: "width:100%;height:100%;object-fit:cover;display:block" }));
     box.append(playOverlay());
     return box;
@@ -164,7 +164,7 @@ export function cardMedia(c, { w = 360 } = {}) {
 
   const box = el("div.media.gif", {
     style: "position:relative;aspect-ratio:1;background:#000000" });
-  box.append(el("img.still", { src: thumb(m.still, w) || m.gif, alt: c.id, loading: "lazy",
+  box.append(el("img.still", { src: thumb(m.still, w) || m.gif, alt: c.id,
     style: "width:100%;height:100%;object-fit:cover;display:block" }));
   if (m.gif && m.still) {
     box.append(el("img.anim", { alt: "", "aria-hidden": "true", "data-gif": m.gif }));
