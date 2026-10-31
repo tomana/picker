@@ -2985,12 +2985,13 @@ export function build() {
       scrim.onclick = () => closeSheet(kind);
 
       /* the ✕ under the sheet: the open card's, and the code sheet's over it */
-      if (kind === "big" || kind === "code") {
+      // a ✕ under the sheet, on the top one only; the cup has none (it isn't left by a stray tap)
+      if (kind !== "cup") {
         const ex = el("span.scrimx", { "aria-hidden": "true" }, [glyph("cut", 26)]);
         scrim.append(ex);
         const place = () => {
           const b = sh.getBoundingClientRect().bottom, room = window.innerHeight - b;
-          ex.hidden = sh.hidden || room < 44;
+          ex.hidden = sh.hidden || room < 44 || topSheet() !== kind;
           ex.style.top = `${Math.round(b + room / 2)}px`;
         };
         new ResizeObserver(place).observe(sh);
@@ -2998,6 +2999,8 @@ export function build() {
         sh.placeX = place;
       }
       document.body.append(scrim, sh);
+      // the backdrop just under its own sheet: over an open card, a tap beside the sheet closes the sheet
+      if (kind !== "cup") scrim.style.zIndex = String((parseInt(getComputedStyle(sh).zIndex, 10) || 50) - 1);
       shells[kind] = { scrim, sh };
     }
     return shells[kind];
@@ -3125,6 +3128,9 @@ export function build() {
     const k = sheetHist.pop();
     if (k) closeSheet(k, true);
   });
+  const topSheet = () => [...sheetHist].reverse().find((k) => shells[k] && !shells[k].sh.hidden);
+  const placeXs = () => { for (const s of Object.values(shells)) if (s.sh.placeX) s.sh.placeX(); };
+
   function closeSheet(kind, fromBack = false) {
     closeBubble();
     const s = shells[kind];
@@ -3138,6 +3144,7 @@ export function build() {
       const i = sheetHist.lastIndexOf(kind);
       if (i >= 0) { sheetHist.splice(i, 1); skipPop++; history.back(); }
     }
+    placeXs();
 
     if (kind === "big" && listen.el) {
       if (listen.card) listen.card.at = null;
@@ -3181,7 +3188,7 @@ export function build() {
     if (s.sh.hidden) { sheetHist.push(kind); history.pushState({ sheet: kind }, ""); }
     s.scrim.hidden = false;
     s.sh.hidden = false;
-    if (s.sh.placeX) requestAnimationFrame(s.sh.placeX);
+    requestAnimationFrame(placeXs);
   }
   /* Escape closes the topmost. A phone never sends one; a keyboard expects it,
      and it costs one listener for the whole page. */
