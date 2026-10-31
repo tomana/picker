@@ -34,7 +34,7 @@ export async function run(log) {
       const st = await page.evaluate(() => {
         const hole = document.querySelector(".walk .whole"), cap = document.querySelector(".walk .wcap");
         const h = hole.getBoundingClientRect(), c = cap.getBoundingClientRect();
-        return { k: document.querySelector(".walk .wk span").textContent, of: document.querySelector(".walk .wk span:last-child").textContent,
+        return { k: document.querySelector(".walk .wcap").getAttribute("aria-label"), of: document.querySelector(".walk .wk span:last-child").textContent,
                  hole: !hole.hidden, words: document.querySelector(".walk .wt").textContent,
                  onScreen: c.top >= 0 && c.bottom <= innerHeight, clear: hole.hidden || c.bottom <= h.top + 1 || c.top >= h.bottom - 1,
                  inView: hole.hidden || (h.bottom > 0 && h.top < innerHeight), next: document.querySelector(".walk .wnav .wbtn:last-child").textContent };
@@ -44,7 +44,8 @@ export async function run(log) {
       assert(st.words.length > 30, `step "${st.k}" says little: ${st.words}`);
       assert(st.onScreen && st.clear && st.inView, `step "${st.k}": the box ${JSON.stringify(st)}`);
       eq(st.hole, st.k !== "the picker", `"${st.k}": a part in the light, except the first, the whole page`);
-      if (st.k === "tabs") assert(/This one, .+, is (picked|hybrid|scored)/.test(st.words), `the tabs step names this tab's kind: ${st.words}`);
+      if (st.k === "tabs") assert(/This (one, .+,|tab) is (picked|hybrid|scored)\./.test(st.words), `the tabs step names this tab's kind: ${st.words}`);
+      eq(await page.$$eval(".walk .wk span", (x) => x.length), 1, "no title in the box, only its count");
       seen.push(st.k);
       if (i < keys.length - 1) { await page.click(".walk .wnav .wbtn:last-child"); await sleep(250); }
       else eq(st.next, "done", "the last step's button is done");
@@ -57,7 +58,7 @@ export async function run(log) {
     await openList();
     await pick("a card");
     await page.waitForSelector(".walk .wcap", { timeout: 5000 });
-    eq(await page.$eval(".walk .wk span", (s) => s.textContent), "a card", "a step from ⚙ starts there");
+    eq(await page.$eval(".walk .wcap", (s) => s.getAttribute("aria-label")), "a card", "a step from ⚙ starts there");
     await page.keyboard.press("Escape");
     await sleep(300);
     eq(await page.$(".walk"), null, "Escape ended it");
@@ -71,7 +72,7 @@ export async function run(log) {
       const st = await page.evaluate(() => {
         const hole = document.querySelector(".walk .whole").getBoundingClientRect(), sh = document.querySelector(".sheet.big:not([hidden])").getBoundingClientRect();
         const c = document.querySelector(".walk .wcap").getBoundingClientRect();
-        return { k: document.querySelector(".walk .wk span").textContent, of: document.querySelector(".walk .wk span:last-child").textContent,
+        return { k: document.querySelector(".walk .wcap").getAttribute("aria-label"), of: document.querySelector(".walk .wk span:last-child").textContent,
                  inSheet: hole.top >= sh.top - 4 && hole.bottom <= sh.bottom + 4 && hole.height > 10,
                  clear: c.bottom <= hole.top + 1 || c.top >= hole.bottom - 1, onScreen: c.top >= 0 && c.bottom <= innerHeight,
                  next: document.querySelector(".walk .wnav .wbtn:last-child").textContent };

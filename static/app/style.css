@@ -1554,7 +1554,7 @@ span.qthumb { display:inline-block; background:var(--dip) }
 .walk .whole { position:fixed; outline:1px solid #ffffff; box-shadow:0 0 0 200vmax rgba(0,0,0,.74); pointer-events:none }
 .walk .wcap { position:fixed; left:16px; right:16px; max-width:480px; margin:0 auto; padding:14px 16px 12px;
               background:var(--bg); border:1px solid #5a5a5a; color:var(--fg) }
-.walk .wk { display:flex; justify-content:space-between; font-size:12px; letter-spacing:.13em; text-transform:uppercase;
+.walk .wk { display:flex; justify-content:flex-end; font-size:12px; letter-spacing:.13em; text-transform:uppercase;
             color:var(--mut) }
 .walk .wt { font-size:16px; line-height:1.45; margin:10px 0 14px }
 .walk .wpic { display:flex; justify-content:center; margin:16px 0 4px; color:var(--fg) }
