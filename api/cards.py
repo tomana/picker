@@ -234,6 +234,22 @@ def _small(card: dict) -> dict:
     return out
 
 
+LIGHT = ("id", "type", "name", "label", "archived", "pools", "vote", "updated", "need", "created", "media")
+MAX_IDS = 300
+
+
+def _light(card: dict) -> dict:
+    """A card as a list needs it before its row is fetched: who it is, where it sorts, its picture's links, and of
+    its versions what its name is made from (each one's vote and first part)."""
+    out = {k: card[k] for k in LIGHT if k in card}
+    vs = card.get("versions") or []
+    if vs:
+        out["versions"] = [{k: v[k] for k in ("n", "vote") if k in v}
+                           | ({"parts": [{k: p0[k] for k in ("kind", "id") if k in p0}]}
+                              if len(vs) > 1 and (p0 := (v.get("parts") or [None])[0]) else {}) for v in vs]
+    return {**out, "stub": True}
+
+
 # Build type lists once per generation; retain snapshots so later pages do not shift under the caller.
 # Cache entries hold generation, rows and id-to-position.
 _built: dict[tuple, list] = {}
@@ -362,11 +378,17 @@ def list_cards():
             return jsonify({"error": "that order is no longer kept: start again", "gen": CAT.token()}), 410
     else:
         snap = _rows(want, show_archived)
-    gen, out, _ = snap
+    gen, out, at = snap
+    # rows asked for by id (the grid nearing stubs): from the same order, those still in it
+    ids = request.args.get("ids")
+    if ids is not None:
+        want_ids = [i for i in ids.split(",") if i][:MAX_IDS]
+        return jsonify({"cards": [_small(out[at[i]]) for i in want_ids if i in at], "gen": CAT.token(gen)})
     skip = max(0, request.args.get("skip", type=int) or 0)
     limit = request.args.get("limit", type=int)
     page = out[skip:skip + limit] if limit and limit > 0 else out[skip:]
-    return jsonify({"cards": [_small(c) for c in page], "more": max(0, len(out) - skip - len(page)),
+    shape = _light if request.args.get("light") in ("1", "true") else _small
+    return jsonify({"cards": [shape(c) for c in page], "more": max(0, len(out) - skip - len(page)),
                     "gen": CAT.token(gen)})
 
 

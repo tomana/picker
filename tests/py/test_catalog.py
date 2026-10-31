@@ -78,6 +78,22 @@ class Index(unittest.TestCase):
         self.assertEqual([c["id"] for c in p2["cards"]], ["cb", "ca"], "the first page's order, not the new one")
         self.assertTrue(all(c["small"] for c in p2["cards"]))
 
+    def test_light_pages_then_rows_by_id(self):
+        """The rest of a big tab as stubs (who, where it sorts, its pictures), then whole rows as the grid nears them."""
+        _, p1 = self.get("&limit=2")
+        _, p2 = self.get(f"&gen={p1['gen']}&skip=2&light=1")
+        self.assertEqual([c["id"] for c in p2["cards"]], ["cb", "ca"])
+        for c in p2["cards"]:
+            self.assertTrue(c["stub"])
+            self.assertLessEqual(set(c), set(self.C.LIGHT) | {"stub", "versions"})
+            for v in c.get("versions", []):          # only what its name is made from
+                self.assertLessEqual(set(v), {"n", "vote", "parts"})
+                for p in v.get("parts", []):
+                    self.assertLessEqual(set(p), {"kind", "id"})
+        _, rows = self.get(f"&gen={p1['gen']}&ids=ca,nosuch,cb")
+        self.assertEqual([c["id"] for c in rows["cards"]], ["ca", "cb"], "the ones asked for, still in the order")
+        self.assertTrue(all("versions" in c and not c.get("stub") for c in rows["cards"]))
+
     def test_an_order_no_longer_kept_is_410(self):
         _, p1 = self.get("&limit=2")
         for k in range(self.C.SNAPSHOTS + 1):          # as many new generations, each with its list built

@@ -400,7 +400,7 @@ export async function load() {
     try {
       for (let more = 1; more > 0 && gen.get(t) === g;) {
         const r = await fetch(`/api/cards?type=${encodeURIComponent(t)}&gen=${encodeURIComponent(head)}`
-                              + `&skip=${n}&limit=${REST}`, { cache: "no-store" });
+                              + `&skip=${n}&limit=${REST}&light=1`, { cache: "no-store" });
         if (gen.get(t) !== g) return;
         if (r.status === 410) { await whole(t); out.onCards(); return; }
         if (!r.ok) throw new Error(`→ ${r.status}`);
@@ -415,6 +415,25 @@ export async function load() {
     } catch (e) { console.error(`${t}: the cards after the first ${n}:`, e); }
   };
   on.forEach((t, i) => { if (lists[i].more) rest(t, firstOf[i], lists[i].cards.length); });
+
+  /* The rest of a tab comes as stubs; their rows are fetched by id as the grid nears them, and filled into the same
+     card objects, so whatever holds a card keeps holding it. Returns the ids filled. */
+  out.rows = async (t, ids) => {
+    const filled = [];
+    for (let i = 0; i < ids.length; i += 300) {
+      const part = ids.slice(i, i + 300);
+      const l = await j(`/api/cards?type=${encodeURIComponent(t)}&ids=${part.map(encodeURIComponent).join(",")}`);
+      const byId = new Map(out.cards.map((c) => [c.id, c]));
+      for (const fresh of l.cards) {
+        const c = byId.get(fresh.id);
+        if (!c || !c.stub) continue;
+        Object.assign(c, fresh);
+        delete c.stub;
+        filled.push(c.id);
+      }
+    }
+    return filled;
+  };
 
   /* Mutate shared data in place so cached elements retain valid references. */
 

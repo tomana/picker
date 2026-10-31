@@ -26,8 +26,12 @@ async function run(ahead, rowsAhead, speed) {
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   await page.setRequestInterception(true);
-  page.on("request", (r) => (r.method() === "GET" || r.method() === "HEAD") ? r.continue()
-    : r.respond({ status: 200, contentType: "application/json", body: "{}" }));
+  let fetches = 0;
+  page.on("request", (r) => {
+    if (/[?&]ids=/.test(r.url())) fetches++;
+    return (r.method() === "GET" || r.method() === "HEAD") ? r.continue()
+      : r.respond({ status: 200, contentType: "application/json", body: "{}" });
+  });
   const cdp = await page.target().createCDPSession();
   if (cpu > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
   await cdp.send("Network.enable");
@@ -92,15 +96,15 @@ async function run(ahead, rowsAhead, speed) {
            gapPct: f.length ? Math.round((100 * gap.length) / f.length) : 0,
            slotFrames: f.filter((x) => x.slots).length, picFrames: f.filter((x) => x.pics).length,
            stubFrames: f.filter((x) => x.stubs).length, maxSlots: Math.max(0, ...f.map((x) => x.slots)),
-           long: f.filter((x) => x.dt > 50).length, maxDt: Math.round(Math.max(0, ...f.map((x) => x.dt))) };
+           long: f.filter((x) => x.dt > 50).length, maxDt: Math.round(Math.max(0, ...f.map((x) => x.dt))), fetches };
 }
 
 console.log(`${tab} · ${BASE} · 390×844 · CPU ×${cpu} · RTT ${rtt} ms · ${swipes} flings`);
-console.log("ahead rows speed  frames travelled  gap%  unbuilt-frames  no-picture-frames  no-data-frames  max-unbuilt  long>50ms  max-frame");
+console.log("ahead rows speed  frames travelled  gap%  unbuilt-frames  no-picture-frames  no-data-frames  max-unbuilt  long>50ms  max-frame  row-fetches");
 for (const ahead of aheads) for (const r of (rows.length ? rows : [0])) for (const speed of speeds) {
   const m = await run(ahead, r, speed);
   console.log(`${String(ahead).padStart(5)} ${String(r || "-").padStart(4)} ${String(speed).padStart(5)}  ${String(m.frames).padStart(6)} ${String(m.travelled).padStart(9)}`
     + `  ${String(m.gapPct).padStart(4)}  ${String(m.slotFrames).padStart(14)}  ${String(m.picFrames).padStart(17)}  ${String(m.stubFrames).padStart(14)}`
-    + `  ${String(m.maxSlots).padStart(11)}  ${String(m.long).padStart(9)}  ${String(m.maxDt).padStart(9)}`);
+    + `  ${String(m.maxSlots).padStart(11)}  ${String(m.long).padStart(9)}  ${String(m.maxDt).padStart(9)}  ${String(m.fetches).padStart(11)}`);
 }
 await browser.close();

@@ -652,20 +652,58 @@ export function build() {
       / Math.max(60, (document.documentElement.clientWidth - t.gridgap * (cols - 1)) / cols)));
     const slices = { gen: 0, raf: 0 };
     const want = new Set();
-    if (gridIO) { gridIO.near.disconnect(); gridIO.far.disconnect(); }
+    if (gridIO) { gridIO.near.disconnect(); gridIO.far.disconnect(); if (gridIO.rowsIO) gridIO.rowsIO.disconnect(); }
     const screens = (v, dflt) => {
       const n = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v));
       return n > 0 ? n : dflt;
     };
     const AHEAD = screens("--grid-ahead", 3), KEEP = Math.max(AHEAD + 1, screens("--grid-keep", 5));
+    const ROWS_AHEAD = Math.max(AHEAD, screens("--rows-ahead", 3));
+    const inNear = new WeakSet();
     const near = new IntersectionObserver((es) => {
-      for (const e of es) if (e.isIntersecting) want.add(e.target); else want.delete(e.target);
+      for (const e of es)
+        if (e.isIntersecting) { inNear.add(e.target); want.add(e.target); }
+        else { inNear.delete(e.target); want.delete(e.target); }
       if (want.size) sliceSoon();
     }, { rootMargin: `${AHEAD * 100}% 0px ${AHEAD * 100}% 0px` });
     const far = new IntersectionObserver((es) => {
       for (const e of es) if (!e.isIntersecting) evict(e.target);
     }, { rootMargin: `${KEEP * 100}% 0px ${KEEP * 100}% 0px` });
-    gridIO = { near, far };
+    // stubs (cards whose row isn't fetched yet) in blocks within ROWS_AHEAD screens: their rows, a batch a frame
+    const asked = new Set();
+    let rowsT = 0;
+    const askRows = () => {
+      rowsT = 0;
+      const byType = new Map();
+      for (const c of pendingRows) { if (!byType.has(c.type)) byType.set(c.type, []); byType.get(c.type).push(c); }
+      pendingRows.clear();
+      for (const [ty, cs] of byType) {
+        if (!d.rows) continue;
+        d.rows(ty, cs.map((c) => c.id)).then((ids) => {
+          for (const c of cs) {
+            asked.delete(c.id);
+            const ph = slotFor.get(c);
+            if (ph && !c.stub) {
+              ph.classList.remove("nodata");
+              if (inNear.has(ph.parentElement)) want.add(ph.parentElement);
+            }
+          }
+          if (want.size) sliceSoon();
+        }, () => { for (const c of cs) asked.delete(c.id); });
+      }
+    };
+    const pendingRows = new Set();
+    const rowsIO = new IntersectionObserver((es) => {
+      for (const e of es) {
+        if (!e.isIntersecting) continue;
+        for (const ph of e.target.querySelectorAll(":scope > .cardph.nodata")) {
+          const c = slotCard.get(ph);
+          if (c && c.stub && !asked.has(c.id)) { asked.add(c.id); pendingRows.add(c); }
+        }
+      }
+      if (pendingRows.size && !rowsT) rowsT = requestAnimationFrame(askRows);
+    }, { rootMargin: `${ROWS_AHEAD * 100}% 0px ${ROWS_AHEAD * 100}% 0px` });
+    gridIO = { near, far, rowsIO };
 
     const slotOf = (c) => {
       let ph = slotFor.get(c);
@@ -674,6 +712,7 @@ export function build() {
         slotCard.set(ph, c);
         slotFor.set(c, ph);
       }
+      ph.classList.toggle("nodata", !!c.stub);
       return ph;
     };
 
@@ -691,12 +730,13 @@ export function build() {
         blk.style.setProperty("--rows", String(Math.ceil(n / laidCols)));
         for (let i = b; i < b + n; i++) {
           const c = list[i];
-          if (i < FIRST || built.has(c)) { const e = cardEl(c); pickCard(e, c); blk.append(e); }
+          if ((i < FIRST && !c.stub) || built.has(c)) { const e = cardEl(c); pickCard(e, c); blk.append(e); }
           else blk.append(slotOf(c));
         }
         frag.append(blk);
         near.observe(blk);
         far.observe(blk);
+        rowsIO.observe(blk);
       }
     };
 
@@ -707,13 +747,13 @@ export function build() {
       const t0 = performance.now();
       for (const blk of want) {
         let ph = null;
-        while (performance.now() - t0 < 8 && (ph = blk.querySelector(":scope > .cardph"))) {
+        while (performance.now() - t0 < 8 && (ph = blk.querySelector(":scope > .cardph:not(.nodata)"))) {
           const c = slotCard.get(ph), e = cardEl(c);
           ph.replaceWith(e);
           if (poolPicking) pickCard(e, c);
           watchCard(e);
         }
-        if (!blk.isConnected || !blk.querySelector(":scope > .cardph")) want.delete(blk);
+        if (!blk.isConnected || !blk.querySelector(":scope > .cardph:not(.nodata)")) want.delete(blk);
         if (performance.now() - t0 >= 8) break;
       }
       if (want.size) sliceSoon();
@@ -1777,10 +1817,10 @@ export function build() {
     return m;
   }
 
-  const merge = (c, fresh) => { Object.assign(c, fresh); if (!fresh.small) delete c.small; return c; };
+  const merge = (c, fresh) => { Object.assign(c, fresh); if (!fresh.small) delete c.small; if (!fresh.stub) delete c.stub; return c; };
   const wholes = new WeakMap();
   function whole(c) {
-    if (!c.small) return Promise.resolve(c);
+    if (!c.small && !c.stub) return Promise.resolve(c);
     if (!wholes.has(c)) {
       const p = fetch(`/api/cards/${encodeURIComponent(c.id)}`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`→ ${r.status}`))))
@@ -2915,6 +2955,7 @@ export function build() {
 
                      media: (id) => {
                        const fc = (d.cards || []).find((x) => x.id === id);
+                       if (fc && fc.stub && d.rows) { d.rows(fc.type, [fc.id]); return null; }   // bands on its next redraw
                        return fc && !hasPicture(fc) ? mediaOf(fc, d, { version: shownAt(fc) }) : null;
                      } });
     cupClosed = () => {
@@ -3427,9 +3468,30 @@ export function build() {
   let opening = 0;
   function openCard(c, d, spawn, startAt = null) {
     const my = ++opening;
-    if (!c.small) { openWhole(c, d, spawn, startAt); return; }
-    whole(c).then(() => { if (my === opening) openWhole(c, d, spawn, startAt); },
-                  (e) => { if (my === opening) toast(`${c.id} didn't open: ${e.message}`); });
+    if (!c.small && !c.stub && !stubAncestor(c, d)) { openWhole(c, d, spawn, startAt); return; }
+    whole(c).then(() => withAncestors(c, d))
+      .then(() => { if (my === opening) openWhole(c, d, spawn, startAt); },
+            (e) => { if (my === opening) toast(`${c.id} didn't open: ${e.message}`); });
+  }
+
+  // the open card plays from the recording it came from (makeOrig): those rows, if they are still stubs
+  const ancestorIds = (c, d) => {
+    const ids = [];
+    let x = c;
+    for (let k = 0; x && k < 6; k++) {
+      const id = ((x.origin || {}).from || {}).card || (x.lineage || {}).parent;
+      x = id && (d.cards || []).find((y) => y.id === id);
+      if (x) ids.push(x);
+    }
+    return ids;
+  };
+  const stubAncestor = (c, d) => ancestorIds(c, d).some((x) => x.stub);
+  async function withAncestors(c, d) {
+    for (let k = 0; k < 6 && d.rows; k++) {
+      const stubs = ancestorIds(c, d).filter((x) => x.stub);
+      if (!stubs.length) return;
+      await d.rows(stubs[0].type, stubs.map((x) => x.id));
+    }
   }
 
   /* THE AGENT MENU: the agents as tabs, then the shown agent's models (⚙'s choice marked); a tap on a model picks that
