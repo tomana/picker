@@ -1865,7 +1865,16 @@ export function build() {
       if (autoplay && (audio || bandParts.length)) requestAnimationFrame(() => {
         if (!block.isConnected) return;
         const sp = autoplay.solo && (ver.parts || []).find((q) => q.id === autoplay.solo && q.audio);
-        if (sp && controls) {
+        if (autoplay.from != null && !sp) {
+          const lanes = controls && bandParts.length && !mixWhole();
+          if (!lanes && listen.el === player.el && player.el.getAttribute("src") === audio) {
+            listen.card = c; listen.ver = ver.id; listen.tick = lineIn(block);      // the same sound: it goes on as it is
+            pb.classList.add("on");
+            return;
+          }
+          pausedAt.set(c.id, { ver: ver.id, at: autoplay.from / (ver.duration || autoplay.from + 1), secs: autoplay.from });
+          startMix();
+        } else if (sp && controls) {
           playBands(c, bandParts.some((q) => q.id === sp.id) ? bandParts : [sp],
                     { only: sp.id, tick: lineIn(block), done: repaint, ver: ver.id })
             .then(() => { if (repaint) repaint(); });
@@ -3823,7 +3832,9 @@ export function build() {
     const VIEW_NAME = { wholebody: "full body", newshort: "close-up" };
     let view = null;
     let trimEl = null;
-    let resume = null;
+    // a card playing on the grid goes on in the open card's player, from where it is
+    let resume = listen.el && same(listen.card, c) && !listen.solo && !listen.loading
+      && Number.isFinite(listen.el.currentTime) && !listen.el.paused ? { solo: null, from: listen.el.currentTime } : null;
 
     const onScreen = () => {
       const cur = (c.versions || [])[sel];
