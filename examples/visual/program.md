@@ -17,7 +17,7 @@ One JSON file, `pattern.json`:
 | `twist` | how much they turn as they go out: −3 to 3 |
 | `warp` | how much they wobble: 0 to 1 |
 | `speed` | how fast they move: 0.25 to 2 |
-| `colors` | two or more colours, dark to light, `["#050505", "#4a4a4a", "#f0f0f0"]` (two blend, more are stops along the way), or `"orig01"`: a hue wheel, which draws the card as depth contours instead (its `shape` aside) |
+| `colors` | two or more colours, dark to light, `["#050505", "#4a4a4a", "#f0f0f0"]` (two blend, more are stops along the way), `"orig01"`: a hue wheel, which draws the card as depth contours instead, or `"glass"`: grey rings on a shape with a light breaking past it (both set its `shape` aside) |
 
 ## How to make one
 
