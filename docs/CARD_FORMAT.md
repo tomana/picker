@@ -61,7 +61,7 @@ update; readers use one format rather than live migrators.
 | `params`, `params_doc` | objects, optional | the knobs it was made with, and per knob `{unit, what}`: shown in the open card |
 | `ab_at` | number, optional | where B (the reference) starts in `media.ab`, in seconds |
 | `ab_dur` | number, optional | the whole of `media.ab`, in seconds |
-| a type's own | | a sound type may use `method`, `settings`, `items` (takes, each `{id, name, label, parts}`), `face_item`; a show type may use `sections` (`{name, start, len}`); a fitted-sound type may use `family`, `variant`, `ab_gain_db`, `source_sample` |
+| a type's own | | a sound type may use `method`, `settings`, `items` (takes, each `{id, name, label, parts}`, and `diff`: text on what it changed against the take it came from, shown above the open card's text), `face_item`; a show type may use `sections` (`{name, start, len}`); a fitted-sound type may use `family`, `variant`, `ab_gain_db`, `source_sample` |
 
 ## media
 

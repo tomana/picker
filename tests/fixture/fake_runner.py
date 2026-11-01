@@ -109,7 +109,8 @@ def cwd() -> Path:
 
 def brief(job: dict, agent: str) -> str:
     """Name the program file in the fake brief, matching the runner contract."""
-    return (f"A made-up brief for a {job['kind']} of {TYPE}, for {agent}. Read program.md first; then make one "
+    how = f" by {job['method']}" if job.get("method") else ""
+    return (f"A made-up brief for a {job['kind']}{how} of {TYPE}, for {agent}. Read program.md first; then make one "
             f"{ME['kind']} card{' from ' + job['card'] if job.get('card') else ''}.\n{job.get('text') or ''}")
 
 

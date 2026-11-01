@@ -99,16 +99,18 @@ sys.path.insert(0, ".")
 import queue_runner as Q
 agent = sys.argv[1]
 job = {"id": "insight", "type": Q.TYPE, "kind": sys.argv[2], "card": sys.argv[3] or None,
-       "text": sys.argv[4], "version": int(sys.argv[5]) if sys.argv[5].isdigit() else None}
+       "text": sys.argv[4], "version": int(sys.argv[5]) if sys.argv[5].isdigit() else None,
+       **json.loads(sys.argv[6] if len(sys.argv) > 6 else "{}")}
 print(json.dumps({"cwd": str(Q.cwd()), "brief": Q.brief(job, agent)}))
 """
 
 
-def _describe(t: dict, agent: str, kind="seed", card="", text="", version="") -> dict:
+def _describe(t: dict, agent: str, kind="seed", card="", text="", version="", more: dict | None = None) -> dict:
     """Run the type's own context and brief helpers in its runner environment to avoid a second prompt implementation."""
     # Give the helper the same editable package path as the actual runner.
     path = os.pathsep.join(filter(None, [str(CONFIG.PICKER), os.environ.get("PYTHONPATH")]))
-    r = subprocess.run([sys.executable, "-c", _DESCRIBE, agent, kind, card, text, str(version or "")],
+    r = subprocess.run([sys.executable, "-c", _DESCRIBE, agent, kind, card, text, str(version or ""),
+                        json.dumps(more or {})],
                        cwd=str(_home(t)), capture_output=True, text=True, timeout=30,
                        env={**A.agent_env(), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": path})
     if r.returncode:
@@ -186,7 +188,9 @@ def insight(type_):
         abort(400, description=f"{type_} runs {names}")
     # Show what this send would run now; receipts capture what actually ran.
     kind, card = request.args.get("kind") or "seed", request.args.get("card") or ""
-    d = _describe(t, agent, kind, card, request.args.get("text") or "", request.args.get("version") or "")
+    # the item on screen and the method, as a send would queue them
+    more = {k: request.args[k] for k in ("item", "method") if request.args.get(k)}
+    d = _describe(t, agent, kind, card, request.args.get("text") or "", request.args.get("version") or "", more)
     if "error" in d:
         return jsonify({"type": type_, "agent": agent, "error": d["error"]}), 200
     cwd = Path(d["cwd"])

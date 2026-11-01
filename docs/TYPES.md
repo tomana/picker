@@ -34,7 +34,7 @@ there is no live compatibility layer.
 | `sync` | | `{"argv": ["{python}", "sync.py"], "cwd": "."}`: its sync script; absent: the runner writes its cards itself |
 | `plugin` | | its plugin module (below) |
 | `lanes` | | `"by_agent"`: a runner per agent, so jobs for different agents do not block each other; absent: one job at a time |
-| `methods`, `default_method` | | the ways a job can be done (for example, `bundle`) |
+| `methods`, `default_method` | | the ways a job can be done (for example, `bundle`): `{id, label, about}` each; a send uses the default. A method with `send` gets its own button beside revise on the open card, a revise done that way with the same words and ×N: `true` on every version, `"items"` only on a version that has items |
 | `name_prefix` | | its cards' short names are shown as `<prefix>:<name>` (for example, `m:loop1`) and work wherever an id does |
 | `survey_tools` | | commands AUTO's survey agent may run (for example, timing tools) |
 | `capabilities` | | what its cards can do in the page (below) |

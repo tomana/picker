@@ -357,6 +357,7 @@ body { background:var(--ground) }
 .acts > button.seesb.warn { color:var(--warn) }
 
 .acts > button.revn { flex:none; width:44px; padding:0; font-size:14px; font-weight:600 }
+.acts > button.way[hidden] { display:none }
 .acts > button.revn::after { content:"▴"; font-size:22px; line-height:1; color:var(--mut); margin-left:3px }
 .acts > button.revn.many { border-color:#8f8f8f; background:#3a3a3a }
 
@@ -456,6 +457,10 @@ body { background:var(--ground) }
 .cdlog { justify-self:start; padding:2px 0; border:0; background:none; font:inherit; font-size:13px;
          color:#cfcfcf; cursor:pointer }
 .cdlog:active { color:var(--fg) }
+/* an item's diff against the item it came from: a table, so it scrolls sideways rather than wrap */
+.cddiff { margin:0; font-family:ui-monospace,monospace; font-size:11px; line-height:1.45; color:#d9d9d9;
+          white-space:pre; overflow-x:auto; scrollbar-width:thin; padding-bottom:4px;
+          border-bottom:1px solid #2c2c2c }
 /* a hybrid card's parameters (parts/ab.js) */
 .cnarv { font-size:12px; line-height:1.5; color:var(--fg);
          white-space:pre-wrap; word-break:break-word }

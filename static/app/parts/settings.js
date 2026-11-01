@@ -264,10 +264,10 @@ function manifestRow(m) {
 }
 const hhmm = (ts) => (ts ? new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
 
-export async function configured({ type, agent, kind, card, version, model }) {
+export async function configured({ type, agent, kind, card, version, item, method, model }) {
   const box = el("div.sins", {}, [el("div.snote", { text: "reading…" })]);
   let d;
-  try { d = await api.insight(type, agent, { kind, card, version, model }); }
+  try { d = await api.insight(type, agent, { kind, card, version, item, method, model }); }
   catch (e) { put(box, el("div.snote.err", { text: e.message })); return box; }
   if (d.error) { put(box, el("div.snote.err", { text: `the brief does not build: ${d.error}` })); return box; }
   const viewer = pre("");

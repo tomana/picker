@@ -3073,7 +3073,7 @@ export function build() {
   function openConfigured(p) {
     const host = el("div.sbody");
     openSheet("configured",
-      el("div.shead", {}, [el("div.t", { text: `${p.kind} with ${p.agent} · as configured` }), closeBtn("configured")]),
+      el("div.shead", {}, [el("div.t", { text: `${p.word || p.kind} with ${p.agent} · as configured` }), closeBtn("configured")]),
       host);
     configured(p).then((n) => host.replaceChildren(n));
   }
@@ -4057,7 +4057,7 @@ export function build() {
 
     let vrow = null;
 
-    let paintSplit = () => {};
+    let paintSplit = () => {}, paintSends = () => {};
     const toSel = (i) => {
       if (i < 0 || i >= n || i === sel) return;
 
@@ -4068,7 +4068,7 @@ export function build() {
       const k = was ? viewsOf(i).findIndex((x) => x.slug === was) : -1;
       view = k >= 0 ? k : faceOf(i);
       paintPips(); paint(); paintMedia(); paintDesc();
-      paintSplit();
+      paintSplit(); paintSends();
     };
     const paintPips = () => {
       if (!vrow) return;
@@ -4212,6 +4212,7 @@ export function build() {
       const part = (kids) => kids.length ? el("div.cdsec", {}, kids) : null;
 
       const it = itemAt(sel);
+      const diff = it && it.diff ? el("pre.cddiff", { text: it.diff }) : null;
 
       const ref = (it ? `${refOf(c, sel)}:${it.id}` : refOf(c, sel)) + vk;
 
@@ -4252,7 +4253,7 @@ export function build() {
       const topRow = el("div.cdtrow", {}, [ids, tagBox].filter(Boolean));
 
       desc.classList.toggle("orig", !!origRow);
-      desc.replaceChildren(...[topRow, origRow, part(cardPart), part(verPart), audit].filter(Boolean));
+      desc.replaceChildren(...[topRow, origRow, diff, part(cardPart), part(verPart), audit].filter(Boolean));
       desc.scrollTop = 0;
       const fit = (tries = 0) => {
         if (tagBox && !tagBox.isConnected) { if (tries < 10) requestAnimationFrame(() => fit(tries + 1)); return; }
@@ -4285,7 +4286,7 @@ export function build() {
       () => { paintPool(); paintGrid(); autoChanged(); });
 
     const staged = [];
-    const send = (kind, who = null) => async () => {
+    const send = (kind, who = null, how = null) => async () => {
       const text = field.value.trim();
       const files = staged.splice(0);
       field.value = "";
@@ -4299,11 +4300,11 @@ export function build() {
       const base = { ...(shownTrim ? { trim: shownTrim } : {}), ...(shownItem ? { item: shownItem } : {}) };
 
       const meths = (d.typeMethods || {})[c.type] || [];
-      const method = (d.typeMethodDefault || {})[c.type] || (meths[0] || {}).id || null;
+      const method = how ? how.id : (d.typeMethodDefault || {})[c.type] || (meths[0] || {}).id || null;
       const N = howMany();
       const ok = await spawn(kind, c, text, files.map((f) => f.url), vnum,
                              { ...base, ...(method ? { method } : {}), ...(N > 1 ? { count: N } : {}), ...(who || {}) });
-      const label = `${kind}${N > 1 ? ` ×${N}` : ""}${who ? ` · ${[who.backend, who.model].filter(Boolean).join(" · ")}` : ""}`;
+      const label = `${how ? how.label || how.id : kind}${N > 1 ? ` ×${N}` : ""}${who ? ` · ${[who.backend, who.model].filter(Boolean).join(" · ")}` : ""}`;
       if (ok === false) {
         if (text && !draftGet(c.id)) draftSet(c.id, text);
         toast(`NOT queued: ${label}${text ? " — your words are back on the card" : ""}`
@@ -4325,7 +4326,7 @@ export function build() {
     let revN = 1;
     const howMany = () => revN;
 
-    const howBtn = el("button.revn", { type: "button", title: "how many — inspire or revise makes this many, in one session",
+    const howBtn = el("button.revn", { type: "button", title: "how many — a send makes this many, in one session",
                                        "aria-label": "how many revisions", "aria-haspopup": "listbox" });
     const paintN = () => {
       howBtn.textContent = String(revN);
@@ -4378,25 +4379,38 @@ export function build() {
                cur: list.find((a) => a.name === last.agent) || list[0]
                  || (ag.agents || []).find((a) => a.name === first) || null };
     };
-    const ask = (kind, btn) => async (e) => {
+    const ask = (kind, btn, how = null) => async (e) => {
       if (e) e.stopPropagation();
       closePop();
       if (agentMenuOn(btn)) { closeAgentMenu(); return; }
       const { list, last, cur } = await whoNow();
-      if (!list.length) return send(kind)();
-      agentMenu(btn, { title: `${kind} with`, list, cur,
+      const word = how ? how.label || how.id : kind;
+      if (!list.length) return send(kind, null, how)();
+      agentMenu(btn, { title: `${word} with`, list, cur,
         lit: (a) => (a.name === last.agent && "model" in last ? last.model ?? null : (a.choice || {}).model ?? null),
         onPick: (a, model) => {
           try { localStorage.setItem(whoKey, JSON.stringify({ agent: a.name, model })); } catch (_) {}
-          send(kind, { backend: a.name, ...(model ? { model } : {}) })();
+          send(kind, { backend: a.name, ...(model ? { model } : {}) }, how)();
         },
-        info: { title: (a) => `what this ${kind} would run with ${a.name}, as configured`,
-                open: (a, model) => openConfigured({ type: c.type, agent: a.name, kind, card: c.id,
-                                                     version: onScreen().vnum, model }) } });
+        info: { title: (a) => `what this ${word} would run with ${a.name}, as configured`,
+                open: (a, model) => openConfigured({ type: c.type, agent: a.name, kind, word, card: c.id,
+                                                     version: onScreen().vnum, item: onScreen().item,
+                                                     method: how ? how.id : null, model }) } });
     };
     ins.onclick = ask("inspire", ins);
     rev.onclick = ask("revise", rev);
     hold(ins); hold(rev);
+    // the type's other methods with `send`: each a revise done that way, beside revise (docs/TYPES.md)
+    const dflt = (d.typeMethodDefault || {})[c.type];
+    const ways = isRec ? [] : ((d.typeMethods || {})[c.type] || []).filter((m) => m.send && m.id !== dflt).map((m) => {
+      const b = el("button.way", { type: "button", title: m.about || `a new version, by ${m.label || m.id}` },
+                   [glyph("sliders", 13), el("span", { text: m.label || m.id })]);
+      b.onclick = ask("revise", b, m);
+      hold(b);
+      return { m, b };
+    });
+    paintSends = () => { for (const { m, b } of ways) b.hidden = m.send === "items" && !itemsOf(sel).length; };
+    paintSends();
 
     const strip = el("div.stage", { hidden: "" });
     const paintStage = () => {
@@ -4435,7 +4449,7 @@ export function build() {
       field, strip, pick,
 
       el("div.acts" + (isRec ? ".rec" : ""), {},
-         (isRec ? [seesBtn, clip, ins, howBtn] : [seesBtn, clip, ins, rev, howBtn])
+         (isRec ? [seesBtn, clip, ins, howBtn] : [seesBtn, clip, ins, rev, ...ways.map((w) => w.b), howBtn])
            .filter((b) => b && (cap(c.type, "images") !== false || b !== clip))), desc,
     ].filter(Boolean));
 
