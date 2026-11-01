@@ -1,5 +1,5 @@
 import { withPage, assert, eq, sleep } from "./lib.mjs";
-export const name = "walkthrough — from ⚙, a spotlight on each part of the page; back ends it (nothing written)";
+export const name = "walkthrough — from ⚙, a spotlight on each part of the page; its count top left, a ✕ top right; back, ✕ and Escape end it (nothing written)";
 export async function run(log) {
   await withPage(async (page, errs) => {
     const sent = [];
@@ -34,7 +34,7 @@ export async function run(log) {
       const st = await page.evaluate(() => {
         const hole = document.querySelector(".walk .whole"), cap = document.querySelector(".walk .wcap");
         const h = hole.getBoundingClientRect(), c = cap.getBoundingClientRect();
-        return { k: document.querySelector(".walk .wcap").getAttribute("aria-label"), of: document.querySelector(".walk .wk span:last-child").textContent,
+        return { k: document.querySelector(".walk .wcap").getAttribute("aria-label"), of: document.querySelector(".walk .wk > span").textContent,
                  hole: !hole.hidden, words: document.querySelector(".walk .wt").textContent,
                  onScreen: c.top >= 0 && c.bottom <= innerHeight, clear: hole.hidden || c.bottom <= h.top + 1 || c.top >= h.bottom - 1,
                  inView: hole.hidden || (h.bottom > 0 && h.top < innerHeight), next: document.querySelector(".walk .wnav .wbtn:last-child").textContent };
@@ -45,7 +45,14 @@ export async function run(log) {
       assert(st.onScreen && st.clear && st.inView, `step "${st.k}": the box ${JSON.stringify(st)}`);
       eq(st.hole, st.k !== "the picker", `"${st.k}": a part in the light, except the first, the whole page`);
       if (st.k === "tabs") assert(/This (one, .+,|tab) is (picked|hybrid|scored)\./.test(st.words), `the tabs step names this tab's kind: ${st.words}`);
-      eq(await page.$$eval(".walk .wk span", (x) => x.length), 1, "no title in the box, only its count");
+      const head = await page.evaluate(() => {
+        const k = document.querySelector(".walk .wk"), n = k.querySelector(":scope > span"), x = k.querySelector(".wx");
+        const r = (e) => e.getBoundingClientRect(), c = r(document.querySelector(".walk .wcap"));
+        return { spans: k.querySelectorAll(":scope > span").length, left: r(n).left - c.left < 40, right: c.right - r(x).right < 40,
+                 skip: !!document.querySelector(".walk .wnav .wskip") };
+      });
+      assert(head.spans === 1 && head.left && head.right && head.skip,
+             `no title in the box: its count top left, a ✕ top right, skip kept: ${JSON.stringify(head)}`);
       seen.push(st.k);
       if (i < keys.length - 1) { await page.click(".walk .wnav .wbtn:last-child"); await sleep(250); }
       else eq(st.next, "done", "the last step's button is done");
@@ -59,6 +66,13 @@ export async function run(log) {
     await pick("a card");
     await page.waitForSelector(".walk .wcap", { timeout: 5000 });
     eq(await page.$eval(".walk .wcap", (s) => s.getAttribute("aria-label")), "a card", "a step from ⚙ starts there");
+    await page.click(".walk .wx");
+    await sleep(300);
+    eq(await page.$(".walk"), null, "the ✕ ended it");
+    await page.click('button[title^="agents:"]');
+    await openList();
+    await pick("a card");
+    await page.waitForSelector(".walk .wcap", { timeout: 5000 });
     await page.keyboard.press("Escape");
     await sleep(300);
     eq(await page.$(".walk"), null, "Escape ended it");
@@ -72,7 +86,7 @@ export async function run(log) {
       const st = await page.evaluate(() => {
         const hole = document.querySelector(".walk .whole").getBoundingClientRect(), sh = document.querySelector(".sheet.big:not([hidden])").getBoundingClientRect();
         const c = document.querySelector(".walk .wcap").getBoundingClientRect();
-        return { k: document.querySelector(".walk .wcap").getAttribute("aria-label"), of: document.querySelector(".walk .wk span:last-child").textContent,
+        return { k: document.querySelector(".walk .wcap").getAttribute("aria-label"), of: document.querySelector(".walk .wk > span").textContent,
                  inSheet: hole.top >= sh.top - 4 && hole.bottom <= sh.bottom + 4 && hole.height > 10,
                  clear: c.bottom <= hole.top + 1 || c.top >= hole.bottom - 1, onScreen: c.top >= 0 && c.bottom <= innerHeight,
                  next: document.querySelector(".walk .wnav .wbtn:last-child").textContent };
@@ -91,6 +105,6 @@ export async function run(log) {
     eq(await page.$(".sheet.big:not([hidden])"), null, "…and shut the card it opened");
     eq(sent.length, 0, `the walk wrote: ${sent.join(", ")}`);
     eq(errs.length, 0, `page errors: ${errs.join(" | ")}`);
-    log(`${keys.length} steps: ${seen.join(" · ")}; back and Escape end it; an open card's: ${cardSteps.join(" · ")}; nothing written`);
+    log(`${keys.length} steps: ${seen.join(" · ")}; back, the ✕ and Escape end it; an open card's: ${cardSteps.join(" · ")}; nothing written`);
   });
 }
