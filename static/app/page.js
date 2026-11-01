@@ -1344,6 +1344,10 @@ export function build() {
     stop() { this._stopNodes(); this._paused = true; this.onended = null; this.ls = []; },
   };
   function preloadBands(parts) { for (const p of parts) if (p.audio) B.buf(p.audio); }
+  /* Lanes play in step from decoded buffers, ~0.4 MB a second each: a 7-minute piece of eight lanes is over 1 GB,
+     slow to start and too much for a phone. A longer piece streams its mix (and a solo lane its own file) as the
+     AUTO list does; the lanes are decoded only when a mute or a taken-out lane needs them. */
+  const LANES_DECODED_S = 90;
 
   let bandGen = 0;
   async function playBands(c, parts, { tick = null, done = null, from = 0, only = null, ver = null } = {}) {
@@ -1728,10 +1732,22 @@ export function build() {
 
     const abOn = !!cap(c.type, "ab") && !!((ver.media || {}).ab || (ver.media || {}).reference);
     const bandParts = controls && !abOn ? partsOf(c, version).filter((p) => p.kind === "voice" && p.audio && !p.archived) : [];
-    if (bandParts.length) preloadBands(bandParts);
+    const long = (ver.duration || 0) > LANES_DECODED_S;
+    if (bandParts.length && !long) preloadBands(bandParts);
 
     const allCut = controls && !abOn && !bandParts.length
       && partsOf(c, version).some((p) => p.kind === "voice" && p.audio);
+    // a long piece plays its mix while it is the whole piece: no lane muted or taken out
+    const mixWhole = () => long && !!(ver.media || {}).audio
+      && !partsOf(c, version).some((p) => p.kind === "voice" && p.archived)
+      && !bandParts.some((p) => listen.muted.has(p.id));
+    const mixStreaming = () => long && owns(c, ver.id) && !listen.solo && listen.el === player.el;
+    const toLanes = () => {
+      const from = player.el.currentTime || 0;
+      toast("this piece is long: its lanes take a moment to load");
+      playBands(c, bandParts, { tick: lineIn(block), from, ver: ver.id,
+                                done: () => { if (repaint) repaint(); } }).then(() => { if (repaint) repaint(); });
+    };
 
     const block = abOn ? abBlock(c, ver, { controls, stop: stopAudio,
       seg: (from, to, done, which) => {
@@ -1755,10 +1771,15 @@ export function build() {
           m ? listen.muted.add(p.id) : listen.muted.delete(p.id);
 
           if (listen.el === B && same(listen.card, c) && !listen.solo) B.setGain(p.id, m ? 0 : 1);
+          else if (mixStreaming()) toLanes();
           if (repaint) repaint();
         } else if (act === "solo") {
           if (listen.solo === p.id) { stopAudio(); c.at = null; if (repaint) repaint(); }
-          else {
+          else if (long) {
+            play(c, p.audio, { tick: lineIn(block), ver: ver.id, done: repaint });
+            listen.solo = p.id;
+            if (repaint) repaint();
+          } else {
             playBands(c, bandParts.some((q) => q.id === p.id) ? bandParts : [p],
                       { only: p.id, tick: lineIn(block), done: repaint })
               .then(() => { if (repaint) repaint(); });
@@ -1780,6 +1801,7 @@ export function build() {
         } else if (act === "cut") {
 
           if (!p.archived && listen.el === B && same(listen.card, c) && !listen.solo) B.setGain(p.id, 0);
+          else if (!p.archived && mixStreaming()) { listen.muted.add(p.id); toLanes(); }
           writeSignal(c, d, { kind: "archive", voice: p.id, value: !p.archived, ...scoped },
                       () => { if (repaint) repaint(); });
         }
@@ -1809,7 +1831,7 @@ export function build() {
         const r = pa && pa.ver === ver.id && pa.at > 0 && pa.at < 0.995
           ? (pa.secs != null ? pa.secs : pa.at * (ver.duration || 0)) : 0;
         pausedAt.delete(c.id);
-        if (controls && bandParts.length && !span.from) {
+        if (controls && bandParts.length && !span.from && !mixWhole()) {
           playBands(c, bandParts, { tick: lineIn(block), done: fin, ver: ver.id, from: r })
             .then((ok) => { if (ok) pb.classList.add("on"); });
         } else {
@@ -1853,7 +1875,7 @@ export function build() {
         block.dataset.audio = audio;
         scrubbable(block, c, audio, pb, repaint, controls,
           allCut ? () => toast("every band is taken out — nothing to play")
-          : controls && bandParts.length
+          : controls && bandParts.length && !mixWhole()
             ? (f) => playBands(c, bandParts, { tick: lineIn(block), from: f * (ver.duration || 0),
                                                ver: ver.id,
                                                done: () => { pb.classList.remove("on"); if (repaint) repaint(); } })
