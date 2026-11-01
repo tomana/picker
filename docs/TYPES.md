@@ -78,6 +78,11 @@ parts (`sdk.note_line`, `sdk.attempt_note`, `sdk.version_note(job)`, `sdk.attach
 preflights (`sdk.need_exe`, `need_path`, `need_writable`); `sdk.emit` for the trace; `sdk.runner` for a loop's
 runner.json.
 
+**Steers reach the agent by themselves.** Words given to an open job (`POST /api/queue/<id>/steer`) come with the brief
+when `sdk.run_job` starts its agent; while it runs, they stop it between two steps and it goes on with its session
+(claude, codex), the words its next message, or starts again with them (a CLI with no resume). `sdk.steers(job)` gives
+them as they are now, `[{ts, text}]`, for the runner to keep in what it publishes.
+
 **The job comes with its context** (`sdk.context(job)`): the card's versions with their votes and hidden marks, the
 base to build from, the images on the card and with the request, and the files of a frozen cut — resolved by the
 picker from the one fold when the job is claimed. A runner never opens the card store, nor re-implements a vote rule.

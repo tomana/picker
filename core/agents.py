@@ -338,8 +338,9 @@ def execution(name: str, reg: dict | None = None) -> dict:
 
 
 def argv(name: str, prompt: str, cwd: Path, *, model: str | None, effort: str | None,
-         reg: dict | None = None) -> list[str]:
-    """Only explicit config opt-in enables permission bypass flags."""
+         reg: dict | None = None, resume: str | None = None) -> list[str]:
+    """Only explicit config opt-in enables permission bypass flags. `resume`: a session id to go on with, the prompt
+    its next message (claude and codex; resumes() says which can)."""
     reg = reg or load()
     s = spec(name, reg)
     cli = s["cli"]
@@ -363,13 +364,18 @@ def argv(name: str, prompt: str, cwd: Path, *, model: str | None, effort: str | 
             cmd += ["--model", model]
         if effort:
             cmd += ["--effort", effort]
-        return cmd + ["-p", prompt]
+        return cmd + (["--resume", resume] if resume else []) + ["-p", prompt]
     if cli == "codex":
-        cmd = [exe, "exec"]
+        cmd = [exe, "exec", *(["resume"] if resume else [])]
         if model:
             cmd += ["-m", model]
         if effort:
             cmd += ["-c", f"model_reasoning_effort={effort}"]
+        if resume:                                  # exec resume takes no -C or --sandbox: the same, as config
+            policy = (["--dangerously-bypass-approvals-and-sandbox"] if C.get().unrestricted_agents
+                      else ["-c", 'sandbox_mode="workspace-write"', "-c", 'approval_policy="never"',
+                            "-c", "sandbox_workspace_write.network_access=false", "--skip-git-repo-check"])
+            return cmd + [*policy, resume, prompt]
         policy = (["--dangerously-bypass-approvals-and-sandbox"] if C.get().unrestricted_agents
                   else ["--sandbox", "workspace-write", "-c", 'approval_policy="never"',
                         "-c", "sandbox_workspace_write.network_access=false", "--skip-git-repo-check"])
@@ -485,6 +491,36 @@ def _readable(cli: str, line: str) -> str | None:
 CANCEL_POLL = 10.0
 
 
+# STEERS (picker plan 80): words for a job while it is open (POST /api/queue/<jid>/steer). Those given before its agent
+# starts come with its brief; one given while it runs stops the agent between steps (no tool running) and goes on with
+# its session, the words as the next message. A CLI with no resume starts again with them.
+RESUMES = ("claude", "codex")
+_CODEX_SESSION = re.compile(r"session id:\s*([0-9a-f][0-9a-f-]{20,})", re.I)
+
+
+def steer_note(steers: list) -> str:
+    return ("\n\nTHE OPERATOR STEERED THIS JOB (words given while it was queued or ran, in order; the later ones win "
+            "where they disagree):\n" + "\n".join(f"- {s.get('text', '')}" for s in steers)) if steers else ""
+
+
+def steer_words(steers: list) -> str:
+    return ("THE OPERATOR STEERS THIS JOB while you work on it:\n\n" + "\n\n".join(s.get("text", "") for s in steers)
+            + "\n\nTake it into account and carry on with the same job from where you are; the rest of its "
+              "instructions still hold.")
+
+
+def _job_steers() -> tuple[str | None, list]:
+    """The bound job's id and its steers so far (none outside a job)."""
+    jid = T.token("job") or os.environ.get("PICKER_JOB")
+    if not jid:
+        return None, []
+    try:
+        from . import queue as Q
+        return jid, list((Q.get(jid) or {}).get("steers") or [])
+    except Exception:                               # noqa: BLE001  a queue read must never stop the work
+        return jid, []
+
+
 DRAIN_S = 10                      # seconds to read what an agent left in its pipe once it has stopped
 
 
@@ -497,10 +533,14 @@ ONE_ARG = 128 * 1024                           # MAX_ARG_STRLEN, with its NUL
 
 def run(name: str, prompt: str, cwd: Path, logfile: Path, *, model=..., effort=...,
         prefix: list[str] = (), deadline: float | None = None,
-        reg: dict | None = None) -> AgentResult:
+        reg: dict | None = None, steered: int | None = None) -> AgentResult:
     """Stream one invocation; return nonzero exits for run_job to classify, but raise startup failures.
-    Apply saved defaults and optional command wrappers here."""
+    Apply saved defaults and optional command wrappers here. `steered`: how many of the job's steers the prompt
+    already carries (run_job's); None: this adds them."""
     reg = reg or load()
+    jid, given = _job_steers()
+    if steered is None:
+        prompt, steered = prompt + steer_note(given), len(given)
     c = choice(name, reg=reg)
     model = c["model"] if model is ... else model
     effort = c["effort"] if effort is ... else effort
@@ -513,6 +553,8 @@ def run(name: str, prompt: str, cwd: Path, logfile: Path, *, model=..., effort=.
     cmd = list(prefix) + argv(name, prompt, cwd, model=model, effort=effort, reg=reg)
     res = AgentResult(agent=name, model=model, effort=effort, exit=None)
     full = []
+    # the session to go on with, the tools running now (claude's stream says), steers seen, one waiting for a step's end
+    st = {"sid": None, "tools": set(), "seen": steered, "waiting": None, "deliver": None, "extra": []}
     t0 = time.time()
     # The argv exactly as run, with the prompt replaced by its size: the prompt is in
     # the brief, and a 40 KB string in every trace line would bury the rest.
@@ -529,26 +571,86 @@ def run(name: str, prompt: str, cwd: Path, logfile: Path, *, model=..., effort=.
         def take(line):
             line = line.strip()
             if not line:
-                return
+                return False
             full.append(line)
             shown = _readable(cli, line)
             if shown:
                 res.shown.extend(shown.splitlines())
                 log.write(shown + "\n")
                 print(f"  {shown}", flush=True)
+            if cli == "claude":
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    ev = None
+                ev = ev if isinstance(ev, dict) else {}
+                st["sid"] = ev.get("session_id") or st["sid"]
+                content = (ev.get("message") or {}).get("content") if isinstance(ev.get("message"), dict) else None
+                for b in content if isinstance(content, list) else []:
+                    if not isinstance(b, dict):
+                        continue
+                    if b.get("type") == "tool_use":
+                        st["tools"].add(b.get("id"))
+                    elif b.get("type") == "tool_result":
+                        st["tools"].discard(b.get("tool_use_id"))
+            elif cli == "codex" and not st["sid"]:
+                m = _CODEX_SESSION.search(line)
+                st["sid"] = m.group(1) if m else None
+            if st["waiting"] and not st["tools"]:  # the step it waited for has ended: now
+                st["deliver"], st["waiting"] = st["waiting"], None
+                return True
+            return False
+
+        def look():
+            """The poll: a pause or cancel, or a steer, delivered now if no tool runs, else at the step's end."""
+            try:
+                from . import queue as Q
+                stop, steers = Q.watch(jid, T.token("attempt"))
+            except Exception:                   # noqa: BLE001  a queue read must never stop the work
+                return False
+            if stop:
+                return True
+            if len(steers) > st["seen"]:
+                st["waiting"], st["seen"] = steers[st["seen"]:], len(steers)
+            if st["waiting"] and not st["tools"]:
+                st["deliver"], st["waiting"] = st["waiting"], None
+                return True
+            return False
         # Use the tracked process-group path so pause/deadline stops descendants; bound final pipe draining.
-        try:
-            done = P.run(cmd, cwd=cwd, env=agent_env(), deadline=deadline, on_line=take, poll=CANCEL_POLL,
-                         drain=DRAIN_S)
-            if P.job_stop():                # paused or cancelled after the last poll: the work isn't this job's now
+        while True:
+            try:
+                done = P.run(cmd, cwd=cwd, env=agent_env(), deadline=deadline, on_line=take, poll=CANCEL_POLL,
+                             drain=DRAIN_S, stop=look if jid else P.job_stop)
+                if P.job_stop():            # paused or cancelled after the last poll: the work isn't this job's now
+                    res.cancelled = True
+                    log.write("\n[cancelled or paused in the picker as the agent finished — its work is dropped]\n")
+            except W.Stopped as e:
+                done = e.done
+                if st["deliver"] and not P.job_stop():
+                    words, st["deliver"] = st["deliver"], None
+                    st["extra"] += words
+                    # a fresh start (no resume): the brief again, these words added to the steers it carried
+                    fresh = prompt + ("\n" + "\n".join(f"- {w.get('text', '')}" for w in st["extra"]) if steered
+                                      else steer_note(st["extra"]))
+                    cmd = list(prefix) + (
+                        argv(name, steer_words(words), cwd, model=model, effort=effort, reg=reg, resume=st["sid"])
+                        if cli in RESUMES and st["sid"]
+                        else argv(name, fresh, cwd, model=model, effort=effort, reg=reg))
+                    st["tools"] = set()
+                    how = f"resumes {st['sid']}" if cli in RESUMES and st["sid"] else "starts again with them"
+                    log.write(f"\n[the operator steers — the agent stopped between steps and {how}]\n"
+                              + "".join(f"  » {w.get('text', '')}\n" for w in words) + "\n")
+                    T.emit("agents", "agent.steer", agent=name, session=st["sid"],
+                           resumed=cli in RESUMES and bool(st["sid"]), steers=len(words),
+                           chars=sum(len(w.get("text", "")) for w in words),
+                           argv=[f"<prompt: {len(a)} chars>" if len(a) > 200 else a for a in cmd])
+                    continue
                 res.cancelled = True
-                log.write("\n[cancelled or paused in the picker as the agent finished — its work is dropped]\n")
-        except W.Stopped as e:
-            res.cancelled, done = True, e.done
-            log.write("\n[cancelled or paused in the picker — agent stopped]\n")
-        except P.TimedOut as e:
-            res.timed_out, done = True, e.done
-            log.write("\n[the job's time ran out — agent stopped]\n")
+                log.write("\n[cancelled or paused in the picker — agent stopped]\n")
+            except P.TimedOut as e:
+                res.timed_out, done = True, e.done
+                log.write("\n[the job's time ran out — agent stopped]\n")
+            break
     res.exit = done.exit
     res.text = "\n".join(full)
     res.seconds = time.time() - t0
@@ -592,7 +694,8 @@ def run_job(name: str, prompt: str, cwd: Path, logfile: Path, *, prefix: list[st
         raise AgentLimited(AgentResult(agent=name, model=c["model"], effort=None, exit=None,
                                        text="another job found it out"),
                            until=datetime.fromtimestamp(back).astimezone())
-    rec = _receipt(name, s, prompt, cwd, c["model"], c["effort"], prefix, reg)
+    _, given = _job_steers()                  # run() adds the steers so far to the brief; the receipt shows them too
+    rec = _receipt(name, s, prompt + steer_note(given), cwd, c["model"], c["effort"], prefix, reg)
     res = run(name, prompt, cwd, logfile, model=c["model"], effort=c["effort"], prefix=prefix, deadline=deadline,
               reg=reg)
     _receipt_end(rec, res)

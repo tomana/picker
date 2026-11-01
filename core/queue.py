@@ -60,7 +60,7 @@ def _locked(root: Path | None = None):
 
 # What a crash may not lose: these are on the disk before the append returns. A phase or a usage sample is not.
 _FSYNC = {"enqueue", "claim", "made", "done", "failed", "stopped", "wait", "defer", "cancel", "pause", "resume", "requeue",
-          "orphan", "dismiss"}
+          "orphan", "dismiss", "steer"}
 
 
 def _append(rec: dict, root: Path | None = None) -> None:
@@ -260,6 +260,9 @@ def fold(root: Path | None = None) -> dict:
             # Only drafts accept edits; claimed text must remain the text actually run.
             if jobs[jid]["status"] == "queued":
                 jobs[jid]["text"] = rec.get("text", "")
+        elif ev == "steer":
+            # words for the job's agent while it is open: with its brief when it starts, delivered if it runs
+            jobs[jid].setdefault("steers", []).append({"ts": rec.get("ts"), "text": rec.get("text", "")})
         elif ev == "attach":
             # images added to a draft (older logs): like `edit`, only before the claim
             if jobs[jid]["status"] == "queued":
@@ -368,6 +371,21 @@ def stop_asked(job_id: str, attempt: int | None = None, *, root: Path | None = N
     if j["status"] == "cancelled":
         return True
     return j["stopping"] is not None and j["stopping"] == (attempt if attempt is not None else j["live"])
+
+
+def watch(job_id: str, attempt: int | None = None, *, root: Path | None = None) -> tuple[bool, list]:
+    """stop_asked and the job's steers, from one read: what an agent's poll asks (core/agents)."""
+    j = fold(root).get(job_id)
+    if not j:
+        return False, []
+    stop = j["status"] == "cancelled" or (j["stopping"] is not None
+                                          and j["stopping"] == (attempt if attempt is not None else j["live"]))
+    return stop, list(j.get("steers") or [])
+
+
+def steer(job_id: str, text: str, *, root: Path | None = None) -> bool:
+    """Words for an open job's agent: given with its brief when it starts, delivered to it if it runs (core/agents)."""
+    return _if(job_id, lambda j: j["status"] in (*LIVE, "paused"), {"event": "steer", "id": job_id, "text": text}, root)
 
 
 def pause(job_id: str, *, root: Path | None = None) -> bool:

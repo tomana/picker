@@ -64,3 +64,10 @@ def card_dir(cid: str):
 def jobs() -> dict:
     from core import queue as Q
     return Q.fold()
+
+
+def steers(job: dict) -> list:
+    """The job's steers now, [{ts, text}]: words given while it was open (POST /api/queue/<id>/steer), the agent's
+    already (core.agents delivers them); a runner keeps them in what it publishes."""
+    from core import queue as Q
+    return list((Q.get(job["id"]) or {}).get("steers") or [])

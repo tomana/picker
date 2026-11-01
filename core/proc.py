@@ -88,7 +88,8 @@ def run(argv: list, *, log: Path | None = None, cwd: Path | None = None, env: di
         deadline: float | None = None, on_line=None, stop=job_stop, poll: float = POLL,
         drain: float = DRAIN_S) -> Done:
     """Return nonzero exits for the caller to classify; stop/deadline raises only after the group is gone.
-    Exceptions carry captured output in done; on_line replaces default logging and collection."""
+    Exceptions carry captured output in done; on_line replaces default logging and collection, and stops the process
+    as a stop does when it returns True."""
     t0 = time.time()
     res = Done(exit=None)
     if log:
@@ -99,10 +100,10 @@ def run(argv: list, *, log: Path | None = None, cwd: Path | None = None, env: di
     _child(proc.pid, True)
     sel = selectors.DefaultSelector()
     sel.register(proc.stdout, selectors.EVENT_READ)
-    buf, eof = b"", False
+    buf, eof, halt = b"", False, False
 
     def take(chunk: bytes, final: bool = False):
-        nonlocal buf
+        nonlocal buf, halt
         buf += chunk
         *whole, buf = buf.split(b"\n")
         if final and buf:
@@ -110,7 +111,7 @@ def run(argv: list, *, log: Path | None = None, cwd: Path | None = None, env: di
         for raw in whole:
             line = raw.decode("utf-8", errors="replace").rstrip("\r")
             if on_line is not None:
-                on_line(line)
+                halt = bool(on_line(line)) or halt
             else:
                 res.lines.append(line)
                 if out:
@@ -142,6 +143,9 @@ def run(argv: list, *, log: Path | None = None, cwd: Path | None = None, env: di
                 why = "deadline"
                 break
             read(timeout=min(1.0, poll))
+            if halt:
+                why = "stopped"
+                break
         if why:
             if out:
                 out.write(f"\n[{'paused or cancelled in the picker' if why == 'stopped' else 'the time ran out'}"

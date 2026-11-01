@@ -1141,9 +1141,12 @@ export function build() {
       row.classList.add("q-paused");
       return row;
     }
+    // steer: words for its agent now, in the job's sheet (openJob)
+    const steerBtn = () => act(glyph("comment", 16), "steer — words for its agent now, between two steps",
+                               () => openJob(q, d, after, { steer: true }));
     if (d.q && (q.status === "waiting" || q.status === "failed")) {
       if (q.status === "waiting") {
-        row.append(...[lastBtn(), pauseBtn()].filter(Boolean));
+        row.append(...[lastBtn(), steerBtn(), pauseBtn()].filter(Boolean));
         row.append(act(glyph("arrow", 17), "hand it to another agent", () => openJob(q, d, after)));
       } else {
         row.append(act(glyph("loop", 17), "try again", async () => {
@@ -1157,7 +1160,7 @@ export function build() {
       return row;
     }
     if ((draft || run) && d.q) {
-      row.append(...[lastBtn(), pauseBtn()].filter(Boolean));
+      row.append(...[lastBtn(), run ? steerBtn() : null, pauseBtn()].filter(Boolean));
       const x = el("button.qx", { type: "button", title: "cancel" }, [glyph("cut", 18)]);
       x.onclick = async (ev) => {
         ev.stopPropagation();
@@ -3565,7 +3568,7 @@ export function build() {
     return box;
   }
 
-  async function openJob(q, d, after) {
+  async function openJob(q, d, after, { steer = false } = {}) {
     const pre = el("pre.qconsole", { text: "…" });
 
     let follow = true, pending = null;
@@ -3648,6 +3651,34 @@ export function build() {
         })()
       : null;
 
+    // STEER (picker plan 80): words for the agent while the job is open — it gets them between two steps
+    const steerOpen = (st) => ["running", "waiting", "paused"].includes(st);
+    const steers = el("div.qsteers");
+    const paintSteers = (list) => steers.replaceChildren(...(list || []).map((x) => el("div.qsteer", {}, [
+      el("span.qstt", { text: new Date((x.ts || 0) * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }),
+      el("span", { text: x.text })])));
+    paintSteers(q.steers);
+    const steerField = el("textarea.ideabox.qsteerin", { rows: "2", placeholder: "steer it — words for its agent now" });
+    const steerGo = el("button.sbtn", { type: "button" }, [glyph("comment", 14), el("span", { text: "steer" })]);
+    steerGo.onclick = async () => {
+      const text = steerField.value.trim();
+      if (!text) { steerField.focus(); return; }
+      steerGo.disabled = true;
+      try {
+        const r = await fetch(`/api/queue/${encodeURIComponent(q.id)}/steer`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(b.err || r.status);
+        steerField.value = "";
+        paintSteers((b.job || {}).steers);
+        toast(b.job && b.job.status === "running" ? "steered — its agent gets it between two steps"
+                                                  : "steered — its agent gets it when it starts again");
+      } catch (e) { toast(`not steered: ${e.message}`); }
+      steerGo.disabled = false;
+    };
+    const steerBox = d.q ? el("div.qsteerbox", { hidden: steerOpen(q.status) ? null : "" },
+                              [steers, steerField, el("div.qsteerrow", {}, [steerGo])]) : null;
+
     const recHost = el("div", { hidden: "" });
     const recBtn = el("button.sfile", { type: "button" }, [el("span.sfp", { text: "receipts" }),
       el("span.snote", { text: "what each run was given, as it was then" })]);
@@ -3655,8 +3686,9 @@ export function build() {
       recHost.hidden = !recHost.hidden;
       if (!recHost.hidden) recHost.replaceChildren(await receipts(q.id));
     };
-    openSheet("job", head, el("div.sbody", {}, [handoff, request, meta, recBtn, recHost, stages, pre, jump]
+    openSheet("job", head, el("div.sbody", {}, [steerBox, handoff, request, meta, recBtn, recHost, stages, pre, jump]
       .filter(Boolean)));
+    if (steer && steerBox && !steerBox.hidden) steerField.focus();
 
     let stop = false;
     const shut = shells.job;
@@ -3675,6 +3707,10 @@ export function build() {
       if (request && request.lock && job.status !== "queued") {
         request.lock(job.status === "running" ? "a researcher has taken it — no longer editable"
                                               : `${job.status} — no longer editable`);
+      }
+      if (steerBox) {
+        steerBox.hidden = !steerOpen(job.status);
+        if ((job.steers || []).length !== steers.childElementCount) paintSteers(job.steers);
       }
       meta.replaceChildren(
         el("span", { text: job.status }),

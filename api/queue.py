@@ -342,6 +342,19 @@ def retry(jid):
     return jsonify({"ok": True, "job": _out(Q.get(jid)), "runner": runner})
 
 
+@bp.post("/api/queue/<jid>/steer")
+def steer(jid):
+    """Words for an open job's agent (picker plan 80): with its brief when it starts, delivered if it runs (core/agents:
+    between two steps it goes on with its session, the words as the next message). Kept on the job as `steers`."""
+    job = _job_or_404(jid)
+    text = str((request.get_json(silent=True) or {}).get("text") or "").strip()
+    if not text:
+        return jsonify({"ok": False, "err": "send {text}: the words for the agent"}), 400
+    if not Q.steer(jid, text[:4000]):
+        return jsonify({"ok": False, "err": f"a {job['status']} job takes no steer"}), 409
+    return jsonify({"ok": True, "job": _out(Q.get(jid))})
+
+
 @bp.post("/api/queue/<jid>/pause")
 def pause(jid):
     """Prevent claims and stop running work through cancellation polling; resume starts a new attempt."""

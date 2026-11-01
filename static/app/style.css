@@ -409,6 +409,14 @@ body { background:var(--ground) }
         display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2 }   /* the effort never cut off */
 .qbeat.run { color:var(--fg) }
 
+/* the job sheet's steer: the words given so far, then a box for more */
+.qsteerbox { display:grid; gap:6px; padding-bottom:8px; border-bottom:1px solid #2c2c2c }
+.qsteerbox[hidden] { display:none }
+.qsteers { display:grid; gap:3px; font-size:13px; line-height:1.4; color:#d9d9d9 }
+.qsteer { display:flex; gap:8px; overflow-wrap:anywhere }
+.qsteer .qstt { flex:none; color:var(--mut); font-variant-numeric:tabular-nums }
+.qsteerrow { display:flex; justify-content:flex-end }
+.qsteerrow .sbtn { display:inline-flex; align-items:center; gap:6px }
 .qx { flex:none; width:var(--qthumb); height:var(--qthumb); padding:0; border:0;
       background:none; color:var(--mut); font-size:17px; line-height:1;
       display:inline-flex; align-items:center; justify-content:center }
