@@ -3216,7 +3216,20 @@ export function build() {
     if (k) closeSheet(k, true);
   });
   const topSheet = () => [...sheetHist].reverse().find((k) => shells[k] && !shells[k].sh.hidden);
-  const placeXs = () => { for (const s of Object.values(shells)) if (s.sh.placeX) s.sh.placeX(); };
+  const placeXs = () => { for (const s of Object.values(shells)) if (s.sh.placeX) s.sh.placeX(); bandUnder(); };
+  // the band (the optional strip at the top) sits above every backdrop: while a sheet a tap beside closes is on top,
+  // it dims like a backdrop, its links rest, and a tap on it closes that sheet
+  const bandUnder = () => {
+    const b = document.querySelector(".band"), top = topSheet();
+    if (b) b.classList.toggle("undersheet", !!top && top !== "cup");
+  };
+  document.addEventListener("click", (ev) => {
+    if (!(ev.target.closest && ev.target.closest(".band.undersheet"))) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const top = topSheet();
+    if (top) closeSheet(top);
+  }, true);
 
   function closeSheet(kind, fromBack = false) {
     closeBubble();

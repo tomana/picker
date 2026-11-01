@@ -219,6 +219,8 @@ body { background:var(--ground) }
 
 .scrim { position:fixed; inset:0; z-index:40; background:rgba(8,8,8,.62) }
 .scrim[hidden] { display:none }
+.band.undersheet { filter:brightness(.38) }                 /* a backdrop's dim; page.js bandUnder */
+.band.undersheet * { pointer-events:none }
 
 .scrimx { position:absolute; left:50%; transform:translate(-50%, -50%); font-size:22px; line-height:1;
           color:rgba(255,255,255,.38); pointer-events:none }
