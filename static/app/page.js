@@ -2529,6 +2529,14 @@ export function build() {
         el("span.auname.aumade", { text: j.label || j.card || "" }),
         el("span.auwhy", { text: `being made · ${j.agent || ""}`.replace(/ · $/, "") })])]));
 
+    // a row's A/B strip reads its card's versions: cards still stubs (rows not fetched yet) first get theirs
+    const stubs = (P.all ? made : made.slice(0, 8)).map((m) => (d.cards || []).find((x) => x.id === m.card))
+      .filter((c) => c && c.stub);
+    if (stubs.length && d.rows && !P.asking) {
+      P.asking = true;
+      d.rows(type, stubs.map((c) => c.id)).then((ids) => { P.asking = false; if (ids.length) P.paint(); },
+                                                () => { P.asking = false; });
+    }
     const rows = (P.all ? made : made.slice(0, 8)).map((m) => {
       const c = (d.cards || []).find((x) => x.id === m.card);
       const rid = `auto:${m.card}:${m.n}`;
@@ -2937,7 +2945,7 @@ export function build() {
   }
 
   function openCup(type, d, onClose) {
-    const host = el("div.cuphost");
+    const host = el("div.cuphost"), cupAsked = new Set();
     openSheet("cup",
 
       el("div.shead", {}, [
@@ -2955,7 +2963,10 @@ export function build() {
 
                      media: (id) => {
                        const fc = (d.cards || []).find((x) => x.id === id);
-                       if (fc && fc.stub && d.rows) { d.rows(fc.type, [fc.id]); return null; }   // bands on its next redraw
+                       if (fc && fc.stub && d.rows) {                       // bands on its next redraw
+                         if (!cupAsked.has(fc.id)) { cupAsked.add(fc.id); d.rows(fc.type, [fc.id]); }
+                         return null;
+                       }
                        return fc && !hasPicture(fc) ? mediaOf(fc, d, { version: shownAt(fc) }) : null;
                      } });
     cupClosed = () => {
