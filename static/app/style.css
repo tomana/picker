@@ -367,6 +367,7 @@ body { background:var(--ground) }
 .revpop { position:fixed; z-index:80; display:flex; flex-direction:column;
           background:#1e1e1e; border:1px solid #6b6b6b; border-radius:var(--r-in);
           box-shadow:0 6px 20px #000a; overflow:hidden }
+.revpop.whopop { overflow-y:auto; overscroll-behavior:contain }   /* squeezed by a keyboard: it scrolls */
 .revpop .revpi { min-height:32px; border:0; border-bottom:1px solid #2e2e2e; background:none;
                  color:var(--fg); font:inherit; font-size:14px; cursor:pointer }
 .revpop .revpi:last-child { border-bottom:0 }

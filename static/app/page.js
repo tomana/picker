@@ -41,6 +41,21 @@ export function build() {
   const tuningOf = (t) => (TYPES[t] || {}).tuning || null;
   const kindWord = (t, k) => (tuningOf(t) && k === tuningOf(t).id ? tuningOf(t).label || k : k);
   const jobWord = (q) => (tuningOf(q.type) && q.method === tuningOf(q.type).id ? kindWord(q.type, q.method) : q.kind);
+  // the bottom of what is in sight: the visual viewport, and above the keyboard where it overlays the page
+  // (shell.html's interactive-widget=overlays-content resizes neither viewport; the VirtualKeyboard API says where it is)
+  const sightBottom = () => {
+    const vv = window.visualViewport, kb = navigator.virtualKeyboard && navigator.virtualKeyboard.boundingRect;
+    const b = vv ? vv.offsetTop + vv.height : innerHeight;
+    return kb && kb.height > 0 ? Math.min(b, kb.y) : b;
+  };
+  const onKeyboard = (fn) => {
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", fn);
+    if (navigator.virtualKeyboard) navigator.virtualKeyboard.addEventListener("geometrychange", fn);
+  };
+  const offKeyboard = (fn) => {
+    if (window.visualViewport) window.visualViewport.removeEventListener("resize", fn);
+    if (navigator.virtualKeyboard) navigator.virtualKeyboard.removeEventListener("geometrychange", fn);
+  };
   const jobIcon = (q, size) => (jobWord(q) !== q.kind ? glyph("mixer", size) : kindIcon(q.kind, size));
 
   /* How far the dark layer reaches above .cardsec: more than any header
@@ -2430,17 +2445,16 @@ export function build() {
     const growIt = (t) => {
       const top = t.scrollTop, atEnd = t.selectionEnd === t.value.length;
       t.style.height = "auto";
-      const vv = window.visualViewport;
-      const room = vv ? vv.offsetTop + vv.height - t.getBoundingClientRect().top - 12 : 260;
+      const room = sightBottom() - t.getBoundingClientRect().top - 12;
       t.style.height = `${Math.min(Math.max(t.scrollHeight + 2, 46), 260, Math.max(room, 70))}px`;
       t.scrollTop = atEnd ? t.scrollHeight : top;      // the reset to auto lost its place: the end when typing there
     };
     const grow = () => growIt(instr);
     const keyboard = () => {
-      if (!instr.isConnected) { window.visualViewport.removeEventListener("resize", keyboard); return; }
+      if (!instr.isConnected) { offKeyboard(keyboard); return; }
       if (document.activeElement === instr) grow();
     };
-    if (window.visualViewport) window.visualViewport.addEventListener("resize", keyboard);
+    onKeyboard(keyboard);
     instr.addEventListener("focus", grow);
     let armed = 0;
     const paintInstr = () => {
@@ -3782,19 +3796,25 @@ export function build() {
       info: info && { title: info.title, open: (a, m) => { closeAgentMenu(); info.open(a, m); } },
       onPick: (a, m) => { closeAgentMenu(); onPick(a, m); } })]);
     menuBtn = btn;
-    // above its button where there is room, else below
     const r = btn.getBoundingClientRect();
     const w = Math.min(innerWidth - 16, Math.max(240, Math.round(r.width)));
     menuPop.style.width = `${w}px`;
     menuPop.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - w - 8))}px`;
-    if (r.top >= Math.min(320, innerHeight - r.bottom)) {
+    menuPop.style.visibility = "hidden";
+    document.body.append(menuPop);
+    // above its button where it fits whole (or there's more room), else below: the room is what is in sight, between
+    // the band and the keyboard, not the layout's
+    const vv = window.visualViewport, band = document.querySelector(".band");
+    const ceil = Math.max(vv ? vv.offsetTop : 0, band ? band.getBoundingClientRect().bottom : 0), floor = sightBottom();
+    const above = r.top - ceil - 8, below = floor - r.bottom - 8;
+    if (menuPop.scrollHeight <= above || above >= below) {
       menuPop.style.bottom = `${Math.round(innerHeight - r.top + 4)}px`;
-      menuPop.style.maxHeight = `${Math.max(160, Math.round(r.top - 12))}px`;
+      menuPop.style.maxHeight = `${Math.max(120, Math.round(above - 4))}px`;
     } else {
       menuPop.style.top = `${Math.round(r.bottom + 4)}px`;
-      menuPop.style.maxHeight = `${Math.max(160, Math.round(innerHeight - r.bottom - 12))}px`;
+      menuPop.style.maxHeight = `${Math.max(120, Math.round(below - 4))}px`;
     }
-    document.body.append(menuPop);
+    menuPop.style.visibility = "";
     addEventListener("pointerdown", outsideMenu, true);
     addEventListener("scroll", closeAgentMenu, true);
   }
