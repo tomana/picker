@@ -1095,6 +1095,13 @@ export function build() {
       return b;
     };
 
+    // an AUTO job's ■: its tab's AUTO off, the job left to finish (turning AUTO off never cancels its job)
+    const lastBtn = () => (auto && autoIsOn(q.type) ? act(glyph("stop", 15),
+      `stop AUTO ${typeShort(q.type)} after this one — it finishes, nothing new starts`, async () => {
+        const types = AUTO.cur.settings.types.filter((x) => x !== q.type);
+        await autoPut({ on: types.length > 0, types }, q.type);
+        toast(`AUTO ${typeShort(q.type)} off — this one finishes, nothing new starts`);
+      }) : null);
     const pauseBtn = () => act(glyph("pause", 15), run
       ? "pause — stops the agent now; ▶ later starts it over" : "pause — no runner takes it",
       async () => { await d.q.pause(q.id); toast(run ? "paused — its agent is being stopped" : "paused"); });
@@ -1110,7 +1117,7 @@ export function build() {
     }
     if (d.q && (q.status === "waiting" || q.status === "failed")) {
       if (q.status === "waiting") {
-        row.append(pauseBtn());
+        row.append(...[lastBtn(), pauseBtn()].filter(Boolean));
         row.append(act(glyph("arrow", 17), "hand it to another agent", () => openJob(q, d, after)));
       } else {
         row.append(act(glyph("loop", 17), "try again", async () => {
@@ -1124,7 +1131,7 @@ export function build() {
       return row;
     }
     if ((draft || run) && d.q) {
-      row.append(pauseBtn());
+      row.append(...[lastBtn(), pauseBtn()].filter(Boolean));
       const x = el("button.qx", { type: "button", title: "cancel" }, [glyph("cut", 18)]);
       x.onclick = async (ev) => {
         ev.stopPropagation();
