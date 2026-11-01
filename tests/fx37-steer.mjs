@@ -1,5 +1,5 @@
 import { withPage, assert, eq, sleep, showTab, api } from "./lib.mjs";
-export const name = "steer — a running job's row opens its sheet at the steer box; the words go to POST /api/queue/<id>/steer and show in its list (intercepted)";
+export const name = "steer — a running job's row opens its sheet: where it is, its buttons, the steer box; the words go to POST /api/queue/<id>/steer and show in its list (intercepted)";
 
 export async function run(log) {
   const card = (await api("/api/cards?type=fx_music")).cards.find((c) => !c.archived);
@@ -29,12 +29,16 @@ export async function run(log) {
     await page.waitForFunction(() => document.querySelectorAll(".qrow").length >= 1, { timeout: 15000 });
     await sleep(500);
     assert(await page.$$eval(".qrow", (rs) => rs.every((r) => r.scrollWidth <= r.clientWidth + 1)), "the row fits at 360 px");
-    await page.evaluate(() => [...document.querySelectorAll(".qrow button.qx")].find((b) => b.title.startsWith("steer")).click());
+    await page.click(".qrow");
     await page.waitForSelector(".sheet.job:not([hidden]) .qsteerbox:not([hidden]) textarea", { timeout: 8000 });
-    eq(await page.evaluate(() => document.activeElement && document.activeElement.classList.contains("qsteerin")), true,
-       "the box has the focus");
+    await sleep(300);
+    const top = await page.evaluate(() => [...document.querySelector(".sheet.job .sbody").children].filter((x) => x.offsetHeight > 0)
+      .slice(0, 3).map((x) => x.className.split(" ")[0]));
+    eq(JSON.stringify(top), JSON.stringify(["qjstat", "qjacts", "qsteerbox"]), "where it is, its buttons, then the steer");
+    assert(/making/.test(await page.$eval(".sheet.job .qjstat", (x) => x.textContent)), "the status says its phase");
     eq(await page.$$eval(".sheet.job .qsteer", (xs) => xs.map((x) => x.lastChild.textContent).join("|")), "less reverb",
        "the steers so far");
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/job-steer.png` });
     await page.type(".sheet.job .qsteerin", "softer attack on the pads");
     await page.evaluate(() => [...document.querySelectorAll(".sheet.job .qsteerrow .sbtn")][0].click());
     for (let i = 0; i < 30 && !sent.length; i++) await sleep(100);
@@ -44,6 +48,6 @@ export async function run(log) {
        "less reverb|softer attack on the pads", "and listed");
     eq(await page.$eval(".sheet.job .qsteerin", (t) => t.value), "", "the box emptied");
     assert(!errs.length, "page errors: " + errs.slice(0, 4).join(" | "));
-    log(`steered ${JSON.stringify(sent[0])} from the row's button; the sheet lists both steers`);
+    log(`steered ${JSON.stringify(sent[0])} from its sheet; it lists both steers`);
   });
 }

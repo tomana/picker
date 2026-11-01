@@ -44,15 +44,20 @@ async function check(sp, log) {
     assert(fr && /sync failed/.test(fr.text) && /q-failed/.test(fr.cls),
            `the failed row: ${JSON.stringify(fr)}`);
     log(`rows: "${wr.text.replace(/\n/g, " · ")}"  /  "${fr.text.replace(/\n/g, " · ")}"`);
-    const acts = await page.evaluate(() => [...[...document.querySelectorAll(".qrow")].find((r) => r.innerText.includes("zz failed"))
-      .querySelectorAll("button[title]")].map((b) => b.title));
-    for (const t of ["try again", "hand it to another agent", "dismiss"])
-      assert(acts.includes(t), `the failed row offers ${t}: ${acts.join(" | ")}`);
-    await page.evaluate(() => [...document.querySelectorAll(".qrow")]
-      .find((r) => r.innerText.includes("zz waiting")).querySelector("button[title^='hand']").click());
+    // a row opens its job's sheet, where its buttons are
+    const actsOf = async (text) => {
+      await page.evaluate((t) => [...document.querySelectorAll(".qrow")].find((r) => r.innerText.includes(t)).click(), text);
+      await page.waitForFunction((t) => document.querySelector(".sheet.job:not([hidden]) .shead .t")
+        && document.querySelectorAll(".sheet.job .qjacts .sbtn").length && document.querySelector(".sheet.job .reqtext, .sheet.job .req")
+        && document.querySelector(".sheet.job .sbody").textContent.includes(t), { timeout: 5000 }, text);
+      return page.$$eval(".sheet.job .qjacts .sbtn", (bs) => bs.map((b) => b.textContent.trim()));
+    };
+    eq(JSON.stringify(await actsOf("zz failed")), JSON.stringify(["retry…", "dismiss"]), "a failed job's sheet: retry… and dismiss");
+    await page.keyboard.press("Escape");
+    await sleep(300);
+    eq(JSON.stringify(await actsOf("zz waiting")), JSON.stringify(["retry…", "pause", "cancel"]),
+       "a waiting job's: retry… (on another agent), pause, cancel");
     // one button opens the agent menu (the open card's revise menu), the job's agent first; a model tap retries
-    await page.waitForSelector(".sheet.job .qhand .qmenu", { timeout: 5000 });
-    eq(await page.$eval(".sheet.job .qhand .qmenu", (b) => b.textContent), "↻ retry…", "one button for the hand-off");
     // the sandbox has no agent CLI: the page is told every agent is installed, as on a working machine
     await page.evaluate(() => {
       const real = window.fetch;
@@ -64,7 +69,7 @@ async function check(sp, log) {
         return new Response(JSON.stringify(b), { headers: { "Content-Type": "application/json" } });
       };
     });
-    await page.click(".sheet.job .qhand .qmenu");
+    await page.click(".sheet.job .qjacts .qmenu");
     await page.waitForSelector(".whopop .whotab", { timeout: 5000 });
     const tabs = await page.$$eval(".whopop .whotab", (t) => t.map((x) => [x.textContent, x.classList.contains("on")]));
     assert(tabs.some(([t, on]) => t === "codex" && on) && tabs.some(([t]) => t === "claude"),

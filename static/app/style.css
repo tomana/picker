@@ -271,9 +271,6 @@ body { background:var(--ground) }
             text-overflow:ellipsis; white-space:nowrap }
 .shead button { width:40px; height:40px; border:0; background:none;
                 color:var(--ico); font:inherit; font-size:17px; cursor:pointer }
-/* the AUTO sheet opened from a queue row: that row's job, one tap away (page.js qrowOf) */
-.shead .ajob { width:auto; height:30px; padding:0 10px; font-size:12px; color:var(--mut);
-               border:1px solid var(--edge); border-radius:999px; white-space:nowrap }
 .sbody { flex:1; min-height:0; overflow-y:auto; padding:10px }
 
 .sheet.big .sbody { display:flex; flex-direction:column; gap:4px;
@@ -409,14 +406,34 @@ body { background:var(--ground) }
         display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2 }   /* the effort never cut off */
 .qbeat.run { color:var(--fg) }
 
+/* THE JOB'S SHEET (a queue row opens it): where it is, an edge in its state's colour; what can be done, one row of
+   buttons; then the steer, its words, its log */
+.shead .qjauto { width:auto; min-height:30px; height:30px; padding:0 10px; font-size:12px; white-space:nowrap }
+.qjstat { display:grid; gap:3px; padding:8px 10px; background:var(--bg); border-left:3px solid var(--edge) }
+.qjstat.running { border-left-color:var(--up) }
+.qjstat.limited, .qjstat.waiting { border-left-color:var(--warn) }
+.qjstat.failed { border-left-color:var(--down) }
+.qjline { display:flex; align-items:center; font-size:14px; line-height:1.35; color:var(--fg); overflow-wrap:anywhere }
+.qjstat.limited .qjline, .qjstat.waiting .qjline { color:var(--warn) }
+.qjstat.failed .qjline { color:var(--down) }
+.qjrun { font-size:12px; color:var(--mut) }
+.qjacts { display:flex; flex-wrap:wrap; gap:7px }
+.qjacts[hidden] { display:none }
+.qjacts .sbtn { flex:1 1 0; min-width:92px; min-height:40px; display:inline-flex; align-items:center;
+                justify-content:center; gap:7px; white-space:nowrap }
+.qjacts .sbtn.astop { flex:1 1 100%; border-color:#9a4a42; background:#3a1f1c; color:#f0c2bb; font-weight:600 }
+.qjacts .sbtn.qjcancel { color:#e3a59c }
+.qjnote { font-size:12px; color:var(--mut) }
+.qjnote:empty { display:none }
 /* the job sheet's steer: the words given so far, then a box for more */
 .qsteerbox { display:grid; gap:6px; padding-bottom:8px; border-bottom:1px solid #2c2c2c }
 .qsteerbox[hidden] { display:none }
 .qsteers { display:grid; gap:3px; font-size:13px; line-height:1.4; color:#d9d9d9 }
 .qsteer { display:flex; gap:8px; overflow-wrap:anywhere }
 .qsteer .qstt { flex:none; color:var(--mut); font-variant-numeric:tabular-nums }
-.qsteerrow { display:flex; justify-content:flex-end }
-.qsteerrow .sbtn { display:inline-flex; align-items:center; gap:6px }
+.qsteerrow { display:flex; gap:7px; align-items:stretch }
+.qsteerrow .qsteerin { flex:1; min-width:0; margin:0 }
+.qsteerrow .sbtn { flex:none; display:inline-flex; align-items:center; gap:6px }
 .qx { flex:none; width:var(--qthumb); height:var(--qthumb); padding:0; border:0;
       background:none; color:var(--mut); font-size:17px; line-height:1;
       display:inline-flex; align-items:center; justify-content:center }

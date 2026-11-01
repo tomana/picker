@@ -1092,83 +1092,13 @@ export function build() {
       ].filter(Boolean)),
     ]);
 
+    // its buttons are in its sheet (openJob), which a tap opens, an AUTO job's too
     if (d.q) {
       row.style.cursor = "pointer";
-      row.addEventListener("click", async () => {
-        if (!auto) return openJob(q, d, after);
-        await openAuto(q.type);
-        const head = document.querySelector(".sheet.auto:not([hidden]) .shead");
-        if (!head) return openJob(q, d, after);
-
-        if (!head.querySelector(".ajob")) {
-          const b = el("button.ajob", { type: "button", text: "this job ›",
-                                        title: "the job: its log, why it waits, hand it to another agent" });
-          b.onclick = () => { closeSheet("auto"); openJob(q, d, after); };
-          head.lastElementChild.before(b);
-        }
-      });
+      row.addEventListener("click", () => openJob(q, d, after));
     }
-
-    const act = (glyphText, title, fn) => {
-      const b = el("button.qx", { type: "button", title },
-                   typeof glyphText === "string" ? [el("span", { text: glyphText })] : [glyphText]);
-      b.onclick = async (ev) => {
-        ev.stopPropagation();
-        try { await fn(); } catch (e) { toast(e.message); }
-        if (after) after();
-      };
-      return b;
-    };
-
-    // an AUTO job's ■: its tab's AUTO off, the job left to finish (turning AUTO off never cancels its job)
-    const lastBtn = () => (auto && autoIsOn(q.type) ? act(glyph("stop", 15),
-      `stop AUTO ${typeShort(q.type)} after this one — it finishes, nothing new starts`, async () => {
-        const now = (await autoLoad()) || {}, all = (now.settings || {}).types || [];
-        const types = all.filter((x) => x !== q.type);
-        if (types.length < all.length) await autoPut({ on: types.length > 0, types }, q.type);
-        toast(`AUTO ${typeShort(q.type)} off — this one finishes, nothing new starts`);
-      }) : null);
-    const pauseBtn = () => act(glyph("pause", 15), run
-      ? "pause — stops the agent now; ▶ later starts it over" : "pause — no runner takes it",
-      async () => { await d.q.pause(q.id); toast(run ? "paused — its agent is being stopped" : "paused"); });
-    if (d.q && held) {
-      row.append(act(glyph("play", 16), "resume — back in line", async () => {
-        await d.q.resume(q.id); toast("back in line");
-      }));
-
-      row.append(act(glyph("arrow", 17), "resume with another agent", () => openJob(q, d, after)));
-      row.append(act(glyph("cut", 18), "cancel", () => d.q.cancel(q.id)));
-      row.classList.add("q-paused");
-      return row;
-    }
-    // steer: words for its agent now, in the job's sheet (openJob)
-    const steerBtn = () => act(glyph("comment", 16), "steer — words for its agent now, between two steps",
-                               () => openJob(q, d, after, { steer: true }));
-    if (d.q && (q.status === "waiting" || q.status === "failed")) {
-      if (q.status === "waiting") {
-        row.append(...[lastBtn(), steerBtn(), pauseBtn()].filter(Boolean));
-        row.append(act(glyph("arrow", 17), "hand it to another agent", () => openJob(q, d, after)));
-      } else {
-        row.append(act(glyph("loop", 17), "try again", async () => {
-          const r = await d.q.retry(q.id);
-          toast(["trying again", r.runner].filter(Boolean).join(" — "));
-        }));
-        row.append(act(glyph("arrow", 17), "hand it to another agent", () => openJob(q, d, after)));
-        row.append(act(glyph("cut", 18), "dismiss", () => d.q.dismiss(q.id)));
-      }
-      row.classList.add("q-" + q.status);
-      return row;
-    }
-    if ((draft || run) && d.q) {
-      row.append(...[lastBtn(), run ? steerBtn() : null, pauseBtn()].filter(Boolean));
-      const x = el("button.qx", { type: "button", title: "cancel" }, [glyph("cut", 18)]);
-      x.onclick = async (ev) => {
-        ev.stopPropagation();
-        try { await d.q.cancel(q.id); } catch (e) { console.error("cancel:", e); }
-        if (after) after();
-      };
-      row.append(x);
-    }
+    if (held) row.classList.add("q-paused");
+    else if (q.status === "waiting" || q.status === "failed") row.classList.add("q-" + q.status);
     return row;
   }
 
@@ -3587,70 +3517,95 @@ export function build() {
     }, { passive: true });
 
     const stages = el("div.qstages");
+    const auto = q.group === "auto";
+    const origin = (d.cards || []).find((c) => c.id === q.card);
+    const ref = origin ? refOf(origin, (origin.versions || []).length - 1) : q.card;
+    const autoBtn = auto ? el("button.sbtn.qjauto", { type: "button", text: "AUTO ›",
+                                                      title: `AUTO ${typeShort(q.type)}: its settings, what it made` }) : null;
+    if (autoBtn) autoBtn.onclick = () => { closeSheet("job"); openAuto(q.type); };
     const head = el("div.shead", {}, [
       jobIcon(q, 16),
-      el("div.t", { text: `${jobWord(q)}${q.card ? " · " + q.card : ""}` }),
+      el("div.t", { text: [jobWord(q), auto ? "AUTO" : null, ref || typeShort(q.type)].filter(Boolean).join(" · ") }),
+      autoBtn,
       closeBtn("job"),
-    ]);
-    const meta = el("div.qmeta");
+    ].filter(Boolean));
     const request = q.status === "queued" && d.q
       ? draftEditor(q, d, after) : requestBlock(q.text, q.attachments);
 
-    const paused = q.status === "paused";
-    const handoff = (q.status === "waiting" || q.status === "failed" || paused) && d.q
-      ? (() => {
-          const iss = q.issue || {};
-          const agents = (d.typeAgents || {})[q.type] || [];
-          const note = el("div.reqnote");
-          const go = async (agent, model) => {
-            note.textContent = "…";
-            const said = agent ? `${agent}${model ? ` · ${model}` : ""}` : "";
-            try {
-              if (paused) {
-                await d.q.resume(q.id, agent, model);
-                note.textContent = said ? `resumed with ${said}` : "resumed — back in line";
-              } else {
-                const r = await d.q.retry(q.id, agent, model);
-                note.textContent = [said ? "with " + said : "trying again", r.runner].filter(Boolean).join(" — ");
-              }
-              if (after) after();
-            } catch (e) { note.textContent = e.message; }
-          };
-          const cur = (q.waiting && q.waiting.agent) || q.backend ||
-                      (q.researcher || ":").split(":").pop().split("@").pop();
-          return el("div.qhand." + (iss.level || q.status), {}, [
-            el("div.qhs", { text: paused ? `paused — on ${cur || "its agent"}` : iss.short || q.status }),
-            iss.detail ? el("div.qhd", { text: iss.detail }) : null,
-            iss.fix ? el("div.qhf", { text: `→ ${iss.fix}` }) : null,
-            el("div.qhb", {}, [
-              (() => {
-                // the agent menu, the job's agent and model lit; a job not on an agent (a sweep) goes at once
-                const b = el("button.chip.qmenu", { type: "button", text: paused ? "▶ resume…" : "↻ retry…" });
-                b.onclick = async (ev) => {
-                  ev.stopPropagation();
-                  if (agentMenuOn(b)) { closeAgentMenu(); return; }
-                  const ag = await fetch("/api/agents?cached=1").then((r) => r.json()).catch(() => ({}));
-                  const list = (ag.agents || []).filter((a) => a.installed !== false && agents.includes(a.name));
-                  if (!(ag.agents || []).some((a) => a.name === cur) || !list.length) return go(null);
-                  const mine = list.find((a) => a.name === cur);
-                  agentMenu(b, { title: paused ? "resume with" : "retry with", list, cur: mine || list[0],
-                    lit: (a) => (a === mine && q.model) || (a.choice || {}).model || null,
-                    onPick: (a, model) => go(a.name, model) });
-                };
-                return b;
-              })(),
-              q.status === "failed" ? (() => {
-                const b = el("button.chip.dismiss", { type: "button" }, [glyph("cut", 12), "dismiss"]);
-                b.onclick = async () => { await d.q.dismiss(q.id); note.textContent = "dismissed";
-                                          if (after) after(); };
-                return b;
-              })() : null,
-            ].filter(Boolean)),
-            note,
-          ].filter(Boolean));
-        })()
-      : null;
-
+    // THE JOB AT A GLANCE: where it is, on what, and why it waits or failed; then what can be done with it
+    const stat = el("div.qjstat");
+    const note = el("div.qjnote");
+    const acts = el("div.qjacts");
+    let job = q;
+    const agents = (d.typeAgents || {})[q.type] || [];
+    const curAgent = (j) => (j.waiting && j.waiting.agent) || j.backend
+      || (j.researcher || ":").split(":").pop().split("@").pop();
+    const did = async (fn, say) => {
+      note.textContent = "…";
+      try { const r = await fn(); note.textContent = typeof say === "function" ? say(r) : say; }
+      catch (e) { note.textContent = e.message; }
+      if (after) after();
+      refresh();
+    };
+    const btn = (icon, text, title, fn, cls = "") => {
+      const b = el(`button.sbtn${cls}`, { type: "button", title }, [icon, el("span", { text })]);
+      b.onclick = (ev) => { ev.stopPropagation(); fn(b); };
+      return b;
+    };
+    // resume or retry: the agent menu, the job's agent and model lit; a job not on an agent (a sweep) goes at once
+    const again = (j) => btn(glyph(j.status === "paused" ? "play" : "loop", 14), j.status === "paused" ? "resume…" : "retry…",
+      j.status === "paused" ? "back in line, on its agent or another" : "try again, on its agent or another",
+      async (b) => {
+        if (agentMenuOn(b)) { closeAgentMenu(); return; }
+        const cur = curAgent(j), paused = j.status === "paused";
+        const go = (agent, model) => did(() => (paused ? d.q.resume(j.id, agent, model) : d.q.retry(j.id, agent, model)),
+          (r) => [paused ? "resumed" : "trying again", agent ? `with ${agent}${model ? ` · ${model}` : ""}` : null,
+                  r && r.runner].filter(Boolean).join(" — "));
+        const ag = await fetch("/api/agents?cached=1").then((r) => r.json()).catch(() => ({}));
+        const list = (ag.agents || []).filter((a) => a.installed !== false && agents.includes(a.name));
+        if (!(ag.agents || []).some((a) => a.name === cur) || !list.length) return go(null);
+        const mine = list.find((a) => a.name === cur);
+        agentMenu(b, { title: paused ? "resume with" : "retry with", list, cur: mine || list[0],
+          lit: (a) => (a === mine && j.model) || (a.choice || {}).model || null, onPick: (a, model) => go(a.name, model) });
+      }, ".qmenu");
+    const paintActs = (j) => {
+      const open = ["queued", "running", "waiting"].includes(j.status);
+      acts.replaceChildren(...[
+        ["waiting", "failed", "paused"].includes(j.status) ? again(j) : null,
+        open ? btn(glyph("pause", 14), "pause", j.status === "running" ? "stops its agent now; resume starts it over"
+                                                                       : "no runner takes it until resumed",
+                   () => did(() => d.q.pause(j.id), j.status === "running" ? "paused — its agent is being stopped" : "paused"))
+             : null,
+        open || j.status === "paused" ? btn(glyph("cut", 14), "cancel", "cancel this job — what it made so far stays",
+                                            () => did(() => d.q.cancel(j.id), "cancelled"), ".qjcancel") : null,
+        j.status === "failed" ? btn(glyph("cut", 14), "dismiss", "out of the queue; its log stays",
+                                    () => did(() => d.q.dismiss(j.id), "dismissed")) : null,
+        // AUTO's: its tab's AUTO off, this job left to finish (turning AUTO off never cancels its job)
+        auto && open && autoIsOn(j.type) ? btn(glyph("stop", 13), "stop AUTO after this",
+          `AUTO ${typeShort(j.type)} off once this card is made: this job finishes, nothing new starts`, () => did(async () => {
+            const now = (await autoLoad()) || {}, all = (now.settings || {}).types || [];
+            const types = all.filter((x) => x !== j.type);
+            if (types.length < all.length) await autoPut({ on: types.length > 0, types }, j.type);
+          }, `AUTO ${typeShort(j.type)} off — this one finishes, nothing new starts`), ".astop") : null,
+      ].filter(Boolean));
+      acts.hidden = !acts.childElementCount;
+    };
+    const paintStat = (j) => {
+      const iss = j.issue || {};
+      const since = j.status === "running" ? mmss(Date.now() / 1000 - (j.started || j.created || 0)) : null;
+      const line = j.status === "paused" ? ["paused", `on ${curAgent(j) || "its agent"}`,
+                                           j.paused_from === "running" ? "starts over on resume" : null]
+        : j.status === "running" ? [j.phase || "running", since, j.attempts > 1 ? `try ${j.attempts}` : null]
+        : [iss.short || j.status];
+      stat.className = `qjstat ${iss.level || j.status}`;
+      stat.replaceChildren(...[
+        el("div.qjline", {}, [j.status === "running" ? el("i.qdot") : null,
+                              el("span", { text: line.filter(Boolean).join(" · ") })].filter(Boolean)),
+        j.run ? el("div.qjrun", { text: runText(j.run) }) : null,
+        iss.detail ? el("div.qhd", { text: iss.detail }) : null,
+        iss.fix ? el("div.qhf", { text: `→ ${iss.fix}` }) : null,
+      ].filter(Boolean));
+    };
     // STEER (picker plan 80): words for the agent while the job is open — it gets them between two steps
     const steerOpen = (st) => ["running", "waiting", "paused"].includes(st);
     const steers = el("div.qsteers");
@@ -3658,7 +3613,7 @@ export function build() {
       el("span.qstt", { text: new Date((x.ts || 0) * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }),
       el("span", { text: x.text })])));
     paintSteers(q.steers);
-    const steerField = el("textarea.ideabox.qsteerin", { rows: "2", placeholder: "steer it — words for its agent now" });
+    const steerField = el("textarea.ideabox.qsteerin", { rows: "2", placeholder: "words for its agent, now" });
     const steerGo = el("button.sbtn", { type: "button" }, [glyph("comment", 14), el("span", { text: "steer" })]);
     steerGo.onclick = async () => {
       const text = steerField.value.trim();
@@ -3677,7 +3632,7 @@ export function build() {
       steerGo.disabled = false;
     };
     const steerBox = d.q ? el("div.qsteerbox", { hidden: steerOpen(q.status) ? null : "" },
-                              [steers, steerField, el("div.qsteerrow", {}, [steerGo])]) : null;
+                              [steers, el("div.qsteerrow", {}, [steerField, steerGo])]) : null;
 
     const recHost = el("div", { hidden: "" });
     const recBtn = el("button.sfile", { type: "button" }, [el("span.sfp", { text: "receipts" }),
@@ -3686,7 +3641,9 @@ export function build() {
       recHost.hidden = !recHost.hidden;
       if (!recHost.hidden) recHost.replaceChildren(await receipts(q.id));
     };
-    openSheet("job", head, el("div.sbody", {}, [steerBox, handoff, request, meta, recBtn, recHost, stages, pre, jump]
+    paintStat(q);
+    paintActs(q);
+    openSheet("job", head, el("div.sbody", {}, [stat, acts, note, steerBox, request, stages, pre, jump, recBtn, recHost]
       .filter(Boolean)));
     if (steer && steerBox && !steerBox.hidden) steerField.focus();
 
@@ -3694,15 +3651,18 @@ export function build() {
     const shut = shells.job;
     if (shut) shut.scrim.addEventListener("click", () => { stop = true; }, { once: true });
 
-    const tick = async () => {
-      if (stop || shells.job.sh.hidden) return;
-      let job = null, log = null;
+    let drawn = null, looping = false;
+    const refresh = () => tick(looping);       // once while its loop runs, else the loop starts again
+    const tick = async (once = false) => {
+      if (stop || shells.job.sh.hidden) { if (!once) looping = false; return; }
+      let log = null;
       try {
         [job, log] = await Promise.all([
           fetch(`/api/queue/${encodeURIComponent(q.id)}`).then((r) => r.json()),
           fetch(`/api/queue/${encodeURIComponent(q.id)}/log`).then((r) => r.json()),
         ]);
       } catch (e) { console.error("job:", e); return; }
+      if (!job || !job.id) { if (!once) looping = false; return; }     // gone from the queue: nothing to draw
 
       if (request && request.lock && job.status !== "queued") {
         request.lock(job.status === "running" ? "a researcher has taken it — no longer editable"
@@ -3712,10 +3672,9 @@ export function build() {
         steerBox.hidden = !steerOpen(job.status);
         if ((job.steers || []).length !== steers.childElementCount) paintSteers(job.steers);
       }
-      meta.replaceChildren(
-        el("span", { text: job.status }),
-        el("span.qsep", { text: "·" }),
-        el("span", { text: job.researcher || "unclaimed" }));
+      paintStat(job);
+      const key = `${job.status}|${autoIsOn(job.type)}`;
+      if (key !== drawn) { drawn = key; paintActs(job); }
 
       stages.replaceChildren(...(job.stages || []).map((st, i, a) =>
         el("div.qstage" + (i === a.length - 1 ? ".now" : ""), {},
@@ -3731,7 +3690,10 @@ export function build() {
         jump.hidden = false;
       }
 
-      if (job.status === "running" || job.status === "queued") setTimeout(tick, 2000);
+      if (!once) {
+        looping = ["running", "queued", "waiting", "paused"].includes(job.status);
+        if (looping) setTimeout(tick, job.status === "running" || job.status === "queued" ? 2000 : 6000);
+      }
     };
     tick();
   }

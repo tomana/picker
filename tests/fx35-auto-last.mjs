@@ -1,6 +1,6 @@
 import { withPage, assert, eq, sleep, showTab, api } from "./lib.mjs";
 const SHOTS = process.env.SHOTS;
-export const name = "stopping AUTO with a job open — the row's ■ and the sheet's stop after this card turn AUTO off and leave the job; the sheet's stop now cancels it too (PUT intercepted)";
+export const name = "stopping AUTO with a job open — its job's sheet and AUTO's sheet: stop after this card turns AUTO off and leaves the job, stop now cancels it too (PUT intercepted)";
 
 export async function run(log) {
   const real = await api("/api/auto");
@@ -21,6 +21,11 @@ export async function run(log) {
       const u = new URL(r.url());
       if (u.pathname === "/api/queue" && r.method() === "GET")
         return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ queue: jobs }) });
+      const one = jobs.find((j) => u.pathname === `/api/queue/${j.id}`);
+      if (one && r.method() === "GET")
+        return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify(one) });
+      if (/^\/api\/queue\/[^/]+\/log$/.test(u.pathname))
+        return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ lines: ["working"] }) });
       if (u.pathname === "/api/auto" && r.method() === "GET")
         return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ ...real, settings }) });
       if (u.pathname === "/api/auto" && r.method() === "PUT") {
@@ -36,25 +41,38 @@ export async function run(log) {
     await showTab(page, "fx_code");                   // a tab with no AUTO panel: AUTO's state comes with the page
     await page.waitForFunction(() => document.querySelectorAll(".qrow").length >= 2, { timeout: 15000 });
     await sleep(800);
-    const stops = () => page.$$eval(".qrow", (rs) => rs.map((r) =>
-      [...r.querySelectorAll("button.qx")].some((b) => b.title.startsWith("stop AUTO"))));
-    eq(JSON.stringify(await stops()), JSON.stringify([true, false]), "■ on the AUTO job's row, not on the one by hand");
-    const fits = await page.$$eval(".qrow", (rs) => rs.every((r) => r.scrollWidth <= r.clientWidth + 1));
-    assert(fits, "the rows fit at 360 px with the ■");
-    await page.evaluate(() => [...document.querySelectorAll(".qrow button.qx")].find((b) => b.title.startsWith("stop AUTO")).click());
+    eq(await page.$$eval(".qrow button", (bs) => bs.length), 0, "the rows have no buttons: they are in what a row opens");
+    // a row opens its job's sheet; its buttons
+    const open = async (re) => {
+      await page.evaluate(() => document.querySelectorAll(".sheet.job .shead button").forEach((b) => /close|✕/.test(b.title + b.textContent) && b.click()));
+      await page.evaluate((re) => [...document.querySelectorAll(".qrow")].find((r) => new RegExp(re).test(r.textContent)).click(), re);
+      await page.waitForSelector(".sheet.job:not([hidden]) .qjacts .sbtn", { timeout: 8000 });
+      await sleep(300);
+      return page.$$eval(".sheet.job .qjacts .sbtn", (bs) => bs.map((b) => b.textContent.trim()));
+    };
+    eq(JSON.stringify(await open("by hand")), JSON.stringify(["pause", "cancel"]), "a job sent by hand: pause and cancel");
+    eq(JSON.stringify(await open("AUTO")), JSON.stringify(["pause", "cancel", "stop AUTO after this"]),
+       "AUTO's job: and stop AUTO after this");
+    const fits = await page.$$eval(".sheet.job .qjacts .sbtn", (bs) => bs.every((b) => b.scrollWidth <= b.clientWidth + 1));
+    assert(fits, "the buttons fit at 360 px");
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/job-sheet.png` });
+    await page.evaluate(() => [...document.querySelectorAll(".sheet.job .qjacts .sbtn")].find((b) => b.textContent.trim() === "stop AUTO after this").click());
     for (let i = 0; i < 30 && !puts.length; i++) await sleep(100);
     eq(JSON.stringify([puts[0]?.on, puts[0]?.types]), JSON.stringify([true, ["fx_visual"]]), "fx_music's AUTO off, the other tab's left on");
     await sleep(800);
-    assert(!other.some((x) => /cancel|pause/.test(x)), `the job wasn't cancelled or paused: ${other.join(", ")}`);
-    eq(JSON.stringify(await stops()), JSON.stringify([false, false]), "AUTO off: the ■ is gone, the job still listed");
+    assert(!other.some((x) => /cancel|pause|DELETE/.test(x)), `the job wasn't cancelled or paused: ${other.join(", ")}`);
+    eq(JSON.stringify(await page.$$eval(".sheet.job .qjacts .sbtn", (bs) => bs.map((b) => b.textContent.trim()))),
+       JSON.stringify(["pause", "cancel"]), "AUTO off: stop AUTO after this is gone, the job still there");
 
-    // the AUTO sheet, opened from the AUTO row: stop now, or stop after this card
+    // the AUTO sheet, from the AUTO job's sheet (AUTO ›): stop now, or stop after this card
     const sheet = async () => {
       settings = { ...settings, on: true, types: ["fx_music", "fx_visual"] };
       await showTab(page, "fx_music");
       await page.waitForFunction(() => document.querySelectorAll(".qrow").length >= 2, { timeout: 15000 });
       await sleep(600);
-      await page.evaluate(() => [...document.querySelectorAll(".qrow")].find((r) => /AUTO/.test(r.textContent)).querySelector(".qtitle").click());
+      await page.evaluate(() => [...document.querySelectorAll(".qrow")].find((r) => /AUTO/.test(r.textContent)).click());
+      await page.waitForSelector(".sheet.job:not([hidden]) .qjauto", { timeout: 8000 });
+      await page.click(".sheet.job .qjauto");
       await page.waitForFunction(() => document.querySelectorAll(".sheet.auto:not([hidden]) .autofoot .sbtn").length >= 3,
                                  { timeout: 15000 });
       return page.$$eval(".sheet.auto .autofoot .sbtn", (bs) => bs.map((b) => b.textContent.trim()));
