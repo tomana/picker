@@ -741,7 +741,9 @@ export function build() {
         blk.style.setProperty("--rows", String(Math.ceil(n / laidCols)));
         for (let i = b; i < b + n; i++) {
           const c = list[i];
-          if ((i < FIRST && !c.stub) || built.has(c)) { const e = cardEl(c); pickCard(e, c); blk.append(e); }
+          if ((i < FIRST && !c.stub) || built.has(c) || (onScreen.has(c.id) && !c.stub)) {
+            const e = cardEl(c); pickCard(e, c); blk.append(e);
+          }
           else blk.append(slotOf(c));
         }
         frag.append(blk);
@@ -798,13 +800,63 @@ export function build() {
       }
       grid.style.setProperty("--card-h", `${slotH.get(key)}px`);
     };
+    // the card last touched: the one a rebuild keeps in place first
+    let touched = null;
+    grid.addEventListener("pointerdown", (ev) => {
+      const k = ev.target.closest && ev.target.closest("[data-cid]");
+      if (k) touched = { cid: k.dataset.cid, at: performance.now() };
+    }, { capture: true, passive: true });
+
+    /* A rebuilt grid loses the browser's scroll anchor, which then anchors on the wrong part and jumps (a pool tap
+       far down a big tab: ~590 px up). Over a rebuild the browser's anchoring rests and the element a third of the
+       way down the screen is put back where it was. */
+    const holdView = () => {
+      // a card by its id, the outermost element that carries it (its wrap), the same before and after
+      const byId = (cid) => cid && grid.querySelector(`[data-cid="${CSS.escape(cid)}"]`);
+      const seen = (x) => { const r = x && x.getBoundingClientRect(); return r && r.bottom > 0 && r.top < innerHeight; };
+      const e = document.elementFromPoint(innerWidth / 4, innerHeight / 3), under = e && grid.contains(e) ? e : null;
+      const cid = touched && performance.now() - touched.at < 5000 && seen(byId(touched.cid)) ? touched.cid
+        : under && under.closest("[data-cid]") ? under.closest("[data-cid]").dataset.cid : null;
+      const k = cid ? byId(cid) : under && under.closest(".grid > *");
+      if (!k) return () => {};
+      const top = k.getBoundingClientRect().top, root = document.documentElement;
+      root.style.overflowAnchor = "none";
+      // blocks just off screen settle from their estimated size a frame or two later: put it back then too, unless the
+      // page moved on its own in between (a finger, a fling)
+      let at = null;
+      const back = () => {
+        if (at != null && Math.abs(scrollY - at) > 1) return;
+        const now = cid ? byId(cid) : k.isConnected ? k : null;
+        const dy = now ? now.getBoundingClientRect().top - top : 0;
+        if (Math.abs(dy) >= 1) scrollBy(0, dy);
+        at = scrollY;
+      };
+      return () => {
+        back();
+        let still = 0, n = 0;
+        const again = () => {
+          const was = at;
+          back();
+          still = at === was ? still + 1 : 0;
+          if (still < 2 && ++n < 12) requestAnimationFrame(again); else root.style.overflowAnchor = "";
+        };
+        requestAnimationFrame(again);
+      };
+    };
+
+    let onScreen = new Set();
     function paint() {
       const t = (filters.find((f) => f.on) || {}).slug;
       const frag = document.createDocumentFragment();
+      const placed = holdView();
+      onScreen = new Set([...grid.querySelectorAll("article.card[data-cid]:not(.compose)")]
+        .filter((a) => { const r = a.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; })
+        .map((a) => a.dataset.cid));
       slices.gen++;
       want.clear();
       near.disconnect();
       far.disconnect();
+      rowsIO.disconnect();
       if (archive.on) {
 
         if (!archive.loading && archive.key !== t) {
@@ -821,6 +873,7 @@ export function build() {
         grid.replaceChildren(frag);
         watchGifs(grid);
         sizeSlots(`archive:${t}`);
+        placed();
         return;
       }
 
@@ -850,6 +903,7 @@ export function build() {
 
       watchGifs(grid);
       sizeSlots(t || "");
+      placed();
 
       if (!grid.isConnected) requestAnimationFrame(() => { if (regrid) regrid(); });
       grid.classList.toggle("poolpicking", !!poolPicking);
