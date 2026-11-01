@@ -400,8 +400,8 @@ body { background:var(--ground) }
          overflow:hidden; white-space:nowrap }
 .qbeat > span { overflow:hidden; text-overflow:ellipsis }
 
-.qrun { font-size:11px; line-height:14px; color:var(--mut); overflow:hidden;
-        text-overflow:ellipsis; white-space:nowrap }
+.qrun { font-size:11px; line-height:14px; color:var(--mut); overflow:hidden; overflow-wrap:anywhere;
+        display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2 }   /* the effort never cut off */
 .qbeat.run { color:var(--fg) }
 
 .qx { flex:none; width:var(--qthumb); height:var(--qthumb); padding:0; border:0;

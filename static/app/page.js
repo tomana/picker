@@ -997,6 +997,23 @@ export function build() {
     return `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, "0")}`;
   };
 
+  // agents' short words and models' labels, as the agent menus show them: fetched once, the queue repainted when in
+  const runWords = { agents: null, repaint: null };
+  function runText(run) {
+    if (!runWords.agents) {
+      runWords.agents = {};
+      fetch("/api/agents?cached=1").then((r) => r.json()).then((ag) => {
+        for (const a of ag.agents || [])
+          runWords.agents[a.name] = { cli: a.cli || a.name, models: Object.fromEntries(
+            [...((a.catalogue || {}).models || []), ...(a.menu || [])].map((m) => [m.id, m.label || m.id])) };
+        if (runWords.repaint) runWords.repaint();
+      }).catch(() => {});
+    }
+    const a = runWords.agents[run.agent] || {};
+    return [a.cli || run.agent, (a.models || {})[run.model] || run.model,
+            run.effort ? `${run.effort} effort` : "default effort"].filter(Boolean).join(" · ");
+  }
+
   function qrowOf(q, d, after) {
     const run = q.status === "running";
     const draft = q.status === "queued";
@@ -1023,11 +1040,13 @@ export function build() {
     const plain = ref ? [ref, q.method].filter(Boolean).join(" · ") : null;
 
     const auto = q.group === "auto";
+    // AUTO's row says where it works: the card's name where it carries its tab's prefix (h:…), else the tab first
+    const where = ref && namePrefix(q.type) && ref.startsWith(`${namePrefix(q.type)}:`) ? ref
+      : [typeShort(q.type), ref || q.card].filter(Boolean).join(" · ");
     const title = [kindIcon(q.kind, 15),
 
       q.count > 1 ? el("b.qcount", { text: `×${q.count}` }) : null,
-      el("span", { text: auto ? ["AUTO", ref].filter(Boolean).join(" · ")
-                              : q.text || plain || "(no note)" })].filter(Boolean);
+      el("span", { text: auto ? `AUTO · ${where}` : q.text || plain || "(no note)" })].filter(Boolean);
 
     const face = (q.attachments || [])[0] || thumb(m.still, 160) || m.gif;
 
@@ -1037,9 +1056,7 @@ export function build() {
         el("div.qtitle", {}, title),
         el("div.qbeat" + (run ? ".run" : ""), {}, beat),
 
-        q.run ? el("div.qrun", { text: [q.run.agent, q.run.model,
-          q.run.effort ? `${q.run.effort} effort` : "default effort"]
-          .filter(Boolean).join(" · "), title: q.run.planned
+        q.run ? el("div.qrun", { text: runText(q.run), title: q.run.planned
           ? "what this job will run with (its agent's ⚙ setting now)"
           : "what this job's agent started with" }) : null,
       ].filter(Boolean)),
@@ -1126,6 +1143,7 @@ export function build() {
       if (box) box.classList.toggle("noq", state.q.length === 0);
     };
     state.paintQueue = paint;
+    runWords.repaint = paint;
     d.onQueue = () => { state.q = d.queue.map((x) => ({ ...x })); paint(); };
     const wrap = el("div.qscroll", {}, [arm]);
     wrap.append(scrollIndicator(arm, { inset: t.innerRadius }).el);
@@ -2346,11 +2364,22 @@ export function build() {
     const instr = el("textarea.ainstr", { rows: "2", placeholder: "the direction, e.g. slower, calmer, distorted vocals" });
     instr.value = own.comment || "";
     const instrClear = el("button.sbtn.ainstrclear", { type: "button", text: "clear text" });
+    // no taller than what the keyboard leaves below its top: past that it scrolls inside, so the line typed stays seen
     const growIt = (t) => {
+      const top = t.scrollTop, atEnd = t.selectionEnd === t.value.length;
       t.style.height = "auto";
-      t.style.height = `${Math.min(Math.max(t.scrollHeight + 2, 46), 260)}px`;
+      const vv = window.visualViewport;
+      const room = vv ? vv.offsetTop + vv.height - t.getBoundingClientRect().top - 12 : 260;
+      t.style.height = `${Math.min(Math.max(t.scrollHeight + 2, 46), 260, Math.max(room, 70))}px`;
+      t.scrollTop = atEnd ? t.scrollHeight : top;      // the reset to auto lost its place: the end when typing there
     };
     const grow = () => growIt(instr);
+    const keyboard = () => {
+      if (!instr.isConnected) { window.visualViewport.removeEventListener("resize", keyboard); return; }
+      if (document.activeElement === instr) grow();
+    };
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", keyboard);
+    instr.addEventListener("focus", grow);
     const paintInstr = () => {
       instrClear.hidden = !instr.value.trim();
     };
