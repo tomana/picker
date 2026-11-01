@@ -70,7 +70,7 @@ export async function run(log) {
     await page.waitForSelector(".sheet.auto:not([hidden]) .acrit", { timeout: 15000 });
     await page.evaluate(() => [...document.querySelectorAll(".sheet.auto .akind")][1].click());
     await page.type(".sheet.auto textarea.ainstr", "zz darker");
-    const u = await bubble(".sheet.auto .autofoot .seesb");
+    const u = await bubble(".sheet.auto .akindrow .seesb");
     assert(/^revise hands \S+ a card from the .+ auto pool \(none marked: every active card\), .+, at its newest version not voted down, to make its next version, with AUTO's words: ".+"$/.test(u[0]),
            `AUTO's revise: ${u[0]}`);
     assert(/^inspire, by turns, hands it a card the same way, to make a new card from it, with AUTO's words: ".+"$/.test(u[1]),

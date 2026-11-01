@@ -377,6 +377,7 @@ export function build() {
   let tabSaving = false, tabApply = null, tabReopen = null, tabEnd = null;
   function render(d) {
     TYPES = d.typeInfo || {};
+    if (!AUTO.cur && d.auto) AUTO.cur = d.auto;
 
     const filters = d.filters.map((f) => ({ ...f }));
     const grid = el("div.grid");
@@ -400,7 +401,7 @@ export function build() {
     spawnNow = spawn;
     deepLink(d, spawn);
 
-    let qTimer = 0, qFails = 0;
+    let qTimer = 0, qFails = 0, autoRead = 0;
     state.refreshQueue = refreshQueue;
     refreshQ = refreshQueue;
     watchStore(d);
@@ -420,6 +421,11 @@ export function build() {
       const wasLive = new Set(state.q.map((j) => j.id));
       const gone = [...wasLive].filter((id) => !live.some((j) => j.id === id));
       state.q = live;
+      // AUTO's on/off for its rows' ■, which a type's own panel may change: read again, at most every 15 s
+      if (live.some((j) => j.group === "auto") && Date.now() - autoRead > 15000) {
+        autoRead = Date.now();
+        await autoLoad();
+      }
       state.paintQueue();
       if (gone.length && d.reload) {
         try { await d.reload(onTypes()); paintGrid(); } catch (e) { console.error("reload:", e); }
@@ -1098,8 +1104,9 @@ export function build() {
     // an AUTO job's ■: its tab's AUTO off, the job left to finish (turning AUTO off never cancels its job)
     const lastBtn = () => (auto && autoIsOn(q.type) ? act(glyph("stop", 15),
       `stop AUTO ${typeShort(q.type)} after this one — it finishes, nothing new starts`, async () => {
-        const types = AUTO.cur.settings.types.filter((x) => x !== q.type);
-        await autoPut({ on: types.length > 0, types }, q.type);
+        const now = (await autoLoad()) || {}, all = (now.settings || {}).types || [];
+        const types = all.filter((x) => x !== q.type);
+        if (types.length < all.length) await autoPut({ on: types.length > 0, types }, q.type);
         toast(`AUTO ${typeShort(q.type)} off — this one finishes, nothing new starts`);
       }) : null);
     const pauseBtn = () => act(glyph("pause", 15), run
@@ -2361,6 +2368,10 @@ export function build() {
       host, foot);
     await autoLoad(t);
     const cur = AUTO.cur;
+    // this tab's open AUTO jobs: with one, the sheet stops now (cancelling it) or after the card it is making
+    const making = async () => ((await fetch(`/api/queue?live=1&type=${encodeURIComponent(t)}`).then((r) => r.json())
+      .catch(() => ({}))).queue || []).filter((j) => j.group === "auto");
+    const busy = autoIsOn(t) ? await making() : [];
     const s = cur.settings, st = cur.state || {};
     const own = autoTab(t);
     const on = autoIsOn(t);
@@ -2370,7 +2381,7 @@ export function build() {
     const ALL = ["revise", "inspire", ...(tuningOf(t) ? [tuningOf(t).id] : [])], word = (k) => kindWord(t, k);
     const picked = new Set((own.kinds || []).filter((k) => ALL.includes(k)));
     if (!picked.size) picked.add("revise");
-    const kindRow = el("div.akinds.asegbar");
+    const kindRow = el("div.akinds.asegbar"), kindLine = el("div.akindrow", {}, [kindRow]);   // ⓘ goes first, below
     const paintKinds = () => kindRow.replaceChildren(...ALL.map((k) => {
       const b = el("button.aseg.akind" + (picked.has(k) ? ".on" : ""), { type: "button", text: word(k),
         title: !picked.has(k) ? `add ${word(k)}: the kinds on are taken in turn`
@@ -2530,7 +2541,7 @@ export function build() {
     instr.placeholder = "comment — the direction, e.g. slower, calmer, distorted vocals";
     instr.rows = 3;
     host.replaceChildren(...(status ? [el("div.snote", { text: status })] : []),
-      who.el, kindRow, el("div.akeeprow", {}, [keepRow]),
+      who.el, kindLine, el("div.akeeprow", {}, [keepRow]),
       el("div.acomment.k-style", {}, [instr, el("div.acount.ainstrrow", {}, [saved, instrClear])]),
       fold("order", "order:", "set", [], [crit, el("div.acount.acritrow", {}, [critClear]), orderBox], orderSum));
     paintOrder();
@@ -2551,16 +2562,26 @@ export function build() {
     };
 
     const others = s.types.filter((x) => x !== t);
-    const go = async (body, say) => {
+    const go = async (body, say, then = null) => {
       acted = true;
       try {
         const ns = await autoPut({ ...body, criterion: crit.value, comment: instr.value,
                                    kinds: kindsOf(), keep: keep.checked,
                                    agent: who.get(), model: who.model() }, t);
+        const more = then ? await then() : null;
         closeSheet("auto");
-        toast(say(ns));
+        toast(say(ns, more));
       } catch (e) { toast(`${name}: ${e.message}`); }
     };
+    // AUTO off first, so nothing new is queued between; then what it had open is cancelled
+    const cancelAll = async () => {
+      const js = await making();
+      await Promise.all(js.map((j) => fetch(`/api/queue/${encodeURIComponent(j.id)}`, { method: "DELETE" })));
+      return js.length;
+    };
+    const stopBtn = (text, title, fn) => Object.assign(sheetBtn([glyph("stop", 12), text], fn),
+                                                       { className: "sbtn astop", title });
+    const off = { on: others.length > 0, types: others };
     const persp = () => {
       return andList(kindsOf().map(word)) + (kindsOf().length > 1 ? " in turn" : "") + (keep.checked ? ", kept in the list until voted" : "") +
         (instr.value.trim() ? ", with your comment" : ", no comment") +
@@ -2592,9 +2613,14 @@ export function build() {
           (keep.checked ? " What it makes stays in AUTO's list until you vote it up." : "") + guideSaid(ks.map(word), gs) }));
       return gs.every(Array.isArray) ? null : Promise.all(gs);
     });
-    foot.replaceChildren(about, ...(on
-      ? [Object.assign(sheetBtn([glyph("stop", 12), "stop"], () => go({ on: others.length > 0, types: others },
-           () => `${name} off (its settings are kept)`)), { className: "sbtn astop" }),
+    kindLine.prepend(about);
+    foot.replaceChildren(...(on
+      ? [...(busy.length
+          ? [stopBtn("stop now", "AUTO off, and the job it has open cancelled: the card it is making is dropped",
+                     () => go(off, (ns, n) => `${name} off — stopped now${n ? `, its job cancelled` : ""}`, cancelAll)),
+             stopBtn("after this card", "stop after this card: AUTO off once the card it is making is done, that job finishes, nothing new starts",
+                     () => go(off, () => `${name} off after this card — it finishes, nothing new starts`))]
+          : [stopBtn("stop", "AUTO off; its settings are kept", () => go(off, () => `${name} off (its settings are kept)`))]),
          sheetBtn("update", () => go({}, () => `${name}: ${persp()}`))]
       : [sheetBtn("start", () => go({ on: true, types: [...others, t] }, (ns) =>
           `${name} ON — ${persp()}; ${ns.agent} makes from the ${typeLabel(t)} auto pool until it can't`))]));

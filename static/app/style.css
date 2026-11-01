@@ -351,9 +351,12 @@ body { background:var(--ground) }
 .sees .seesmore { display:block; margin-top:8px; padding:0; border:0; background:none; color:#cfcfcf;
                   font:inherit; text-align:left; cursor:pointer }
 
-.acts > button.seesb, .autofoot > button.seesb { flex:none; width:34px; padding:0; border:0; background:none;
-                                                 color:var(--mut) }
-.acts > button.seesb[aria-expanded="true"], .autofoot > button.seesb[aria-expanded="true"] { color:var(--fg) }
+.acts > button.seesb, .autofoot > button.seesb, .akindrow > button.seesb { flex:none; width:34px; padding:0; border:0;
+                                                                          background:none; color:var(--mut) }
+.acts > button.seesb[aria-expanded="true"], .autofoot > button.seesb[aria-expanded="true"],
+.akindrow > button.seesb[aria-expanded="true"] { color:var(--fg) }
+.akindrow { display:flex; gap:7px; min-width:0 }
+.akindrow > .asegbar { flex:1 }
 .acts > button.seesb.warn { color:var(--warn) }
 
 .acts > button.revn { flex:none; width:44px; padding:0; font-size:14px; font-weight:600 }
@@ -1206,6 +1209,8 @@ span.qthumb { display:inline-block; background:var(--dip) }
 .asumt .asumv { flex:1; min-width:0; color:var(--mut); font-size:12.5px }
 
 .autofoot .astop { border-color:#9a4a42; background:#3a1f1c; color:#f0c2bb; font-weight:600 }
+/* two stops (a job open): each its own text's width, on one line; update takes the rest */
+.autofoot .astop:has(~ .astop), .autofoot .astop ~ .astop { flex:1 0 auto; white-space:nowrap; padding:0 10px }
 
 .ainstr { min-height:46px }
 .ainstr.awords { min-height:96px }
