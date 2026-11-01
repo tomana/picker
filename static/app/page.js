@@ -41,7 +41,7 @@ export function build() {
   const tuningOf = (t) => (TYPES[t] || {}).tuning || null;
   const kindWord = (t, k) => (tuningOf(t) && k === tuningOf(t).id ? tuningOf(t).label || k : k);
   const jobWord = (q) => (tuningOf(q.type) && q.method === tuningOf(q.type).id ? kindWord(q.type, q.method) : q.kind);
-  const jobIcon = (q, size) => (jobWord(q) !== q.kind ? glyph("sliders", size) : kindIcon(q.kind, size));
+  const jobIcon = (q, size) => (jobWord(q) !== q.kind ? glyph("mixer", size) : kindIcon(q.kind, size));
 
   /* How far the dark layer reaches above .cardsec: more than any header
      can be, so the top of the page is always covered. */
@@ -4452,7 +4452,7 @@ export function build() {
     // the type's tuning: a revise by its method, beside revise ("items": on a version with items)
     const tune = isRec ? null : tuningOf(c.type);
     const tuneBtn = tune && el("button.tune", { type: "button", title: tune.about || `a tuned version, by ${tune.id}` },
-                               [glyph("sliders", 13), el("span", { text: kindWord(c.type, tune.id) })]);
+                               [glyph("mixer", 13), el("span", { text: kindWord(c.type, tune.id) })]);
     if (tuneBtn) { tuneBtn.onclick = ask("revise", tuneBtn, tune); hold(tuneBtn); }
     paintSends = () => { if (tuneBtn) tuneBtn.hidden = tune.tuning === "items" && !itemsOf(sel).length; };
     paintSends();
