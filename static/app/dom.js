@@ -235,7 +235,7 @@ const GLYPH = {
 
   sliders: '<path d="M3.8 13.4V10M3.8 7.6V2.6M2.5 10h2.6M8 2.6V6M8 8.4v5M6.7 6h2.6M12.2 2.6v6M12.2 11v2.4M10.9 11h2.6"/>',
   /* a type's tuning: faders tilted away, a mixer */
-  mixer: '<path d="M5.2 2.2L2.4 14.2 M8.0 2.2L8.0 14.2 M10.8 2.2L13.6 14.2" stroke-width="1"/><path d="M2.02 10h2.71 M6.94 5h2.13 M11.54 11.6h2.9" stroke-width="2.4"/>',
+  mixer: '<path d="M5.0 1.9L2.8 14.1 M8.0 1.9L8.0 14.1 M11.0 1.9L13.2 14.1" stroke-width="1.3"/><path d="M2.07 10.6h2.71" stroke-width="2.36"/><path d="M6.84 5.8h2.32" stroke-width="2.16"/><path d="M10.96 8.8h2.57" stroke-width="2.28"/>',
 
   pool:    '<ellipse cx="8" cy="9.2" rx="6.2" ry="2.1" fill="currentColor" fill-opacity=".35"/>' +
            '<path d="M1.8 9.2v2.6a6.2 2.1 0 0 0 12.4 0V9.2"/>' +
