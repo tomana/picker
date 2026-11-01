@@ -1,3 +1,4 @@
+import _cfg  # noqa: F401
 import json
 import tempfile
 import unittest

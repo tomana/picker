@@ -61,8 +61,9 @@ type's id.
 
 ## The runner
 
-The picker starts it (`start`, in the runner's folder) when a job is queued or due, in its own systemd scope, and it
-exits when nothing is left to claim. It gets the picker as a package — `from picker import sdk` — through
+The picker starts it (`start`, in the runner's folder) when a job is queued or due (in a systemd scope of its own when
+the picker itself runs under systemd, so a restart of the picker leaves it running), and it exits when nothing is left
+to claim. It gets the picker as a package — `from picker import sdk` — through
 `uv run --with-editable {picker}`, never by putting the picker on its path. By hand, from its folder:
 
     uv run --with-editable <picker> queue_runner.py --agent claude      # <picker>: this repository
@@ -125,7 +126,8 @@ a multi-file plugin can do.
 
 Server extensions not tied to a type are listed in the config's `plugins`.
 
-A downloads plugin can serve `GET /api/downloads/app` to enable the phone-app row in settings. It returns
+Optional, and no plugin in this repository provides it: a downloads plugin can serve `GET /api/downloads/app` to
+enable the phone-app row in settings. It returns
 `{app: {id, name, description, publish}, apk}` even when no build exists (`apk: null`). `publish` is a displayed
 command/path, never executed by the page. A build supplies `version`, `sha`, `size`, `mtime`, `behind`,
 `uncommitted`, `dirty_build`, download `url` and filename `name`; settings uses these for freshness and download.
@@ -135,7 +137,7 @@ command/path, never executed by the page. A build supplies `version`, `sha`, `si
 1. The runner and its instructions (`program.md`), beside the research it writes.
 2. `sync.py`, projecting that research into the card format; check it on a scratch store.
 3. `picker-type.json`: the fields above, the capabilities the cards need.
-4. A line in `picker.toml`'s `types`, then restart the picker through the gate (`picker/tools/gate.py`).
+4. A line in `picker.toml`'s `types`, then restart the picker through the gate (`tools/gate.py`).
 5. Only if the type needs server code of its own: `picker_plugin.py`, named by the manifest's `plugin`.
 
 A project checks its types on the picker's harness with a suite of its own (`tests/move_check.sh --suite <dir>`,

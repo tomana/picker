@@ -679,7 +679,7 @@ export function build() {
       pendingRows.clear();
       for (const [ty, cs] of byType) {
         if (!d.rows) continue;
-        d.rows(ty, cs.map((c) => c.id)).then((ids) => {
+        d.rows(ty, cs.map((c) => c.id)).then(() => {
           for (const c of cs) {
             asked.delete(c.id);
             const ph = slotFor.get(c);
@@ -689,13 +689,24 @@ export function build() {
             }
           }
           if (want.size) sliceSoon();
-        }, () => { for (const c of cs) asked.delete(c.id); });
+        }, () => {
+          for (const c of cs) asked.delete(c.id);
+          setTimeout(() => {
+            if (!gridIO || gridIO.rowsIO !== rowsIO) return;
+            for (const c of cs) {
+              const ph = slotFor.get(c);
+              if (c.stub && ph && inRows.has(ph.parentElement) && !asked.has(c.id)) { asked.add(c.id); pendingRows.add(c); }
+            }
+            if (pendingRows.size && !rowsT) rowsT = requestAnimationFrame(askRows);
+          }, 3000);
+        });
       }
     };
-    const pendingRows = new Set();
+    const pendingRows = new Set(), inRows = new WeakSet();
     const rowsIO = new IntersectionObserver((es) => {
       for (const e of es) {
-        if (!e.isIntersecting) continue;
+        if (!e.isIntersecting) { inRows.delete(e.target); continue; }
+        inRows.add(e.target);
         for (const ph of e.target.querySelectorAll(":scope > .cardph.nodata")) {
           const c = slotCard.get(ph);
           if (c && c.stub && !asked.has(c.id)) { asked.add(c.id); pendingRows.add(c); }
@@ -2505,7 +2516,7 @@ export function build() {
     const open = async (c0, m) => {
       const c = await cardOfRow(c0, m);
       if (!c || c.archived) { toast("that card is archived"); return; }
-      const i = (c.versions || []).findIndex((v) => v.id === m.vid);
+      const i = (c.versions || []).findIndex((v) => (m.vid && v.id === m.vid) || (m.n != null && v.n === m.n));
       openCard(c, d, spawnNow, i >= 0 ? i : null);
     };
     // returns the vote to show at once (voteCells); a failed save repaints the list as it was
@@ -2534,7 +2545,7 @@ export function build() {
       .filter((c) => c && c.stub);
     if (stubs.length && d.rows && !P.asking) {
       P.asking = true;
-      d.rows(type, stubs.map((c) => c.id)).then((ids) => { P.asking = false; if (ids.length) P.paint(); },
+      d.rows(type, stubs.map((c) => c.id)).then(() => { P.asking = false; if (stubs.some((c) => !c.stub)) P.paint(); },
                                                 () => { P.asking = false; });
     }
     const rows = (P.all ? made : made.slice(0, 8)).map((m) => {
@@ -2946,6 +2957,18 @@ export function build() {
 
   function openCup(type, d, onClose) {
     const host = el("div.cuphost"), cupAsked = new Set();
+    let cupH = null, cupT = 0;
+    // the tiles' stubs, asked for together once a paint has named them, then one redraw
+    const cupRows = () => {
+      if (cupT) return;
+      cupT = setTimeout(() => {
+        cupT = 0;
+        const cs = [...cupAsked].filter((c) => c.stub);
+        if (cs.length) d.rows(type, cs.map((c) => c.id)).then(() => {
+          if (cs.some((c) => !c.stub) && cupH && host.isConnected) cupH.refresh();
+        });
+      });
+    };
     openSheet("cup",
 
       el("div.shead", {}, [
@@ -2954,7 +2977,7 @@ export function build() {
       ]),
       host);
 
-    mountCup(host, { ...d.cup,
+    cupH = mountCup(host, { ...d.cup,
                      label: typeLabel,
                      status: () => d.cup.status(type),
                      open: () => d.cup.open(type),
@@ -2963,8 +2986,8 @@ export function build() {
 
                      media: (id) => {
                        const fc = (d.cards || []).find((x) => x.id === id);
-                       if (fc && fc.stub && d.rows) {                       // bands on its next redraw
-                         if (!cupAsked.has(fc.id)) { cupAsked.add(fc.id); d.rows(fc.type, [fc.id]); }
+                       if (fc && fc.stub && d.rows) {                       // bands once its row is in
+                         if (!cupAsked.has(fc)) { cupAsked.add(fc); cupRows(); }
                          return null;
                        }
                        return fc && !hasPicture(fc) ? mediaOf(fc, d, { version: shownAt(fc) }) : null;
