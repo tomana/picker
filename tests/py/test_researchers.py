@@ -546,6 +546,16 @@ class Explain(unittest.TestCase):
             A.run("codex", "x" * A.ONE_ARG, Path("/w"), Path("/dev/null"), model=None, effort=None)
         self.assertIn("one argument holds", str(cm.exception))
 
+    def test_a_runners_own_step_is_named_not_the_brief(self):
+        """A runner that fails in its own work before the brief (a bundle's transcribe) says that step."""
+        why = ("RuntimeError: transcribe failed: … | {\"ok\": false, \"status\": \"failed at sep (sep.htdemucs_ft): "
+               "failed: rc=1, missing ['meta.json']\"}")
+        e = self.case(why, ["claimed", "bundle 1/4: from h:x version 2, a comp of its comp", "bundle 1/4: transcribe"])
+        self.assertEqual(e["short"], "transcribe failed")
+        self.assertIn("before the agent was asked", e["fix"])
+        self.assertEqual(self.case("ValueError: no program.md", ["claimed", "t runner up"])["short"], "brief broken",
+                         "a brief that raises is still the brief")
+
     def test_a_missing_cli_says_install(self):
         e = self.case("FileNotFoundError: [Errno 2] No such file or directory: 'codex'",
                       ["t runner up", "brief builds · 1k chars", "asking codex · gpt"], "codex")

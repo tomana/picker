@@ -750,6 +750,10 @@ def explain(why: str, stages: list[str] = (), agent: str | None = None) -> dict:
     # Only when the trail is known: an empty `stages` is "no record", not "no brief".
     if stages and not any(t.startswith("brief builds") for t in stages) \
             and cls not in ("AgentFailed",) and not re.search(r"exited \d+", msg):
+        # a runner's own step before any brief (a bundle's "transcribe") is named by its phase, not called the brief
+        if last and last != "claimed" and not last.endswith("runner up"):
+            step = last.rsplit(": ", 1)[-1].split(" · ")[0][:40]
+            return out(f"{step} failed", msg, "the runner's own step, before the agent was asked — the detail says why")
         return out("brief broken", msg, "the type's queue_runner.brief() raised — the "
                                         "detail says where")
     return out("failed", msg, None)
