@@ -234,8 +234,8 @@ const GLYPH = {
   comment: '<path d="M2.8 3.6h10.4v6.6H7.4l-3 2.4v-2.4H2.8z"/>',
 
   sliders: '<path d="M3.8 13.4V10M3.8 7.6V2.6M2.5 10h2.6M8 2.6V6M8 8.4v5M6.7 6h2.6M12.2 2.6v6M12.2 11v2.4M10.9 11h2.6"/>',
-  /* a type's tuning: faders on a desk tilted away, a mixer */
-  mixer: '<path d="M3.6 1.8h8.8l3 12.6H.6z" stroke-width="1.1"/><path d="M5.4 3.4L3.2 12.8 M8.0 3.4L8.0 12.8 M10.6 3.4L12.8 12.8" stroke-width="1"/><path d="M2.53 10h2.64 M6.93 6h2.13 M10.99 11h2.77" stroke-width="2.4"/>',
+  /* a type's tuning: faders tilted away, a mixer */
+  mixer: '<path d="M5.2 2.2L2.4 14.2 M8.0 2.2L8.0 14.2 M10.8 2.2L13.6 14.2" stroke-width="1"/><path d="M2.02 10h2.71 M6.94 5h2.13 M11.54 11.6h2.9" stroke-width="2.4"/>',
 
   pool:    '<ellipse cx="8" cy="9.2" rx="6.2" ry="2.1" fill="currentColor" fill-opacity=".35"/>' +
            '<path d="M1.8 9.2v2.6a6.2 2.1 0 0 0 12.4 0V9.2"/>' +
