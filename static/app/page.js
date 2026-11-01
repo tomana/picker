@@ -2380,10 +2380,13 @@ export function build() {
     };
     if (window.visualViewport) window.visualViewport.addEventListener("resize", keyboard);
     instr.addEventListener("focus", grow);
+    let armed = 0;
     const paintInstr = () => {
       instrClear.hidden = !instr.value.trim();
+      instrClear.textContent = armed ? "tap again to clear" : "clear text";
     };
-    // AUTO on: the comment saves itself once typing pauses (the next job takes it); update still saves all
+    // AUTO on: the comment saves itself once typing pauses (the next job takes it); update still saves all. An
+    // emptied comment never saves itself: a stray clear or a held delete would lose it; update says so on purpose
     const saved = el("span.asaved");
     let saveT = 0;
     instr.oninput = () => {
@@ -2391,6 +2394,7 @@ export function build() {
       if (!on) return;
       clearTimeout(saveT);
       saved.textContent = "";
+      if (!instr.value.trim()) { saved.textContent = "empty: not saved (update clears it)"; return; }
       saveT = setTimeout(async () => {
         const text = instr.value;
         try {
@@ -2400,7 +2404,12 @@ export function build() {
         } catch (e) { saved.textContent = `not saved: ${e.message}`; }
       }, 900);
     };
-    instrClear.onclick = () => { instr.value = ""; instr.oninput(); instr.focus(); };
+    // clearing takes a second tap within 3 s
+    instrClear.onclick = () => {
+      if (!armed) { armed = setTimeout(() => { armed = 0; paintInstr(); }, 3000); paintInstr(); return; }
+      clearTimeout(armed); armed = 0;
+      instr.value = ""; instr.oninput(); instr.focus();
+    };
 
     const why = (st.of || {})[t] || "";
     const status = on && why && !/queued a /.test(why) ? why : "";
