@@ -55,9 +55,9 @@ export async function run(log) {
         : x.querySelector(".asecb").hidden ? "shut" : "open"}`).join());
     eq(await parts(), "order:shut", "the order, one line, shut");
     eq(JSON.stringify(await page.$$eval(".sheet.auto .akind", (bs) => bs.map((b) => [b.textContent, b.classList.contains("on")]))),
-       JSON.stringify([["revise", true], ["inspire", false], ["both", false]]), "revise | inspire | both, revise on");
+       JSON.stringify([["revise", true], ["inspire", false]]), "revise and inspire, each on or off; revise on");
     eq(await page.$eval(".sheet.auto .akeepbox", (x) => x.checked), false, "keep in list until voted: off");
-    await page.evaluate(() => [...document.querySelectorAll(".sheet.auto .akind")][2].click());
+    await page.evaluate(() => [...document.querySelectorAll(".sheet.auto .akind")][1].click());
     await page.evaluate(() => document.querySelector(".sheet.auto .akeepbox").click());
     assert(await page.$eval(".sheet.auto .k-style .ainstr", (x) => x.offsetHeight > 0), "the comment in sight");
     assert(await page.$eval(".sheet.auto .asec.k-order .acrit", (x) => x.offsetHeight === 0), "the criterion behind the order's line");
@@ -132,7 +132,7 @@ export async function run(log) {
     eq(await page.$eval(".sheet.auto .ainstr", (x) => x.value), "make it slower and calmer",
        "the comment comes back");
     eq(JSON.stringify(await page.$$eval(".sheet.auto .akind.on", (bs) => bs.map((b) => b.textContent))),
-       JSON.stringify(["both"]), "and both kinds");
+       JSON.stringify(["revise", "inspire"]), "and both kinds");
     eq(await page.$eval(".sheet.auto .akeepbox", (x) => x.checked), true, "and keep");
     eq(await page.$eval(".sheet.auto .acrit", (x) => x.value), "slowest first", "and the criterion");
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/auto-2-again.png` });
@@ -181,7 +181,7 @@ export async function run(log) {
     await sleep(600);
     await openSheet(".card.compose.autop");
     await page.waitForSelector(".sheet.auto:not([hidden]) .acrit", { timeout: 15000 });
-    eq(await page.$$eval(".sheet.auto .akind", (x) => x.length), 3, "the music sheet is the same: revise | inspire | both");
+    eq(await page.$$eval(".sheet.auto .akind", (x) => x.length), 2, "the music sheet is the same: revise and inspire");
     assert(await page.$(".sheet.auto .akeepbox") && await page.$(".sheet.auto .asec.k-order"), "keep, and the order");
     await page.waitForSelector(".sheet.auto:not([hidden]) .autofoot .sbtn", { timeout: 15000 });
     const n1 = puts.length;

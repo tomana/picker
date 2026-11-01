@@ -68,7 +68,7 @@ export async function run(log) {
     if (!(await page.$(".card.compose.autop .phead.open"))) { await page.click(".card.compose.autop .phead-tog"); await sleep(400); }
     await page.click(".card.compose.autop .astrip .astext");
     await page.waitForSelector(".sheet.auto:not([hidden]) .acrit", { timeout: 15000 });
-    await page.evaluate(() => [...document.querySelectorAll(".sheet.auto .akind")][2].click());
+    await page.evaluate(() => [...document.querySelectorAll(".sheet.auto .akind")][1].click());
     await page.type(".sheet.auto textarea.ainstr", "zz darker");
     const u = await bubble(".sheet.auto .autofoot .seesb");
     assert(/^revise hands \S+ a card from the .+ auto pool \(none marked: every active card\), .+, at its newest version not voted down, to make its next version, with AUTO's words: ".+"$/.test(u[0]),

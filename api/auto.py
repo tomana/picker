@@ -52,7 +52,7 @@ def _body(type_: str | None = None):
             "types": _auto_types(),
             "survey": _survey(s, mine),
             # Expose the same per-kind lead text that queued briefs receive.
-            **({"lead": {k: AU._lead(mine, k) for k in AU.KINDS}} if mine else {})}
+            **({"lead": {k: AU._lead(mine, k) for k in AU.kinds_of(mine)}} if mine else {})}
 
 
 @bp.get("/api/auto")
@@ -83,8 +83,8 @@ def _put_auto(body: dict):
         t = body.get("for")
         if not isinstance(t, str) or t not in _auto_types():
             return jsonify({"ok": False, "err": f"a tab's own settings need `for`, one of {_auto_types()}"}), 400
-        if "kinds" in own and not (isinstance(own["kinds"], list) and set(own["kinds"]) <= set(AU.KINDS)):
-            return jsonify({"ok": False, "err": f"kinds are from {list(AU.KINDS)}"}), 400
+        if "kinds" in own and not (isinstance(own["kinds"], list) and set(own["kinds"]) <= set(AU.kinds_of(t))):
+            return jsonify({"ok": False, "err": f"kinds are from {list(AU.kinds_of(t))}"}), 400
         for k in ("keep",):
             if k in own and not isinstance(own[k], bool):
                 return jsonify({"ok": False, "err": f"{k} is true or false"}), 400
@@ -93,7 +93,7 @@ def _put_auto(body: dict):
                 return jsonify({"ok": False, "err": f"{k} is text"}), 400
         # A new pass makes every tab card due again from this moment; a comment alone only changes AUTO's words.
         fresh = {} if set(own) == {"comment"} else {"since": time.time()}
-        new["tabs"] = {**s["tabs"], t: AU.clean_tab({**AU.tab(s, t), **own, **fresh})}
+        new["tabs"] = {**s["tabs"], t: AU.clean_tab({**AU.tab(s, t), **own, **fresh}, t)}
     known = set(_auto_types())
     if not isinstance(new["types"], list) or not set(new["types"]) <= known:
         return jsonify({"ok": False, "err": f"types are from {sorted(known)}"}), 400
@@ -135,7 +135,7 @@ def made():
     AU.reconcile(t)                                   # settle what has ended, on the look
     jobs = [j for j in Q.fold().values() if j.get("group") == AU.GROUP and j.get("type") == t
             and j.get("kind") in AU.KINDS]
-    now = [{"job": j["id"], "card": j.get("card"), "kind": j.get("kind"), "status": j["status"],
+    now = [{"job": j["id"], "card": j.get("card"), "kind": AU.kind_of(j), "status": j["status"],
             "phase": j.get("phase"), "agent": j.get("backend"), "started": j.get("started"),
             "created": j.get("created"),
             "label": (read_card(j["card"]) or {}).get("label") if j.get("card") else None}
@@ -154,7 +154,7 @@ def made():
                     "n": e.get("version"), "vid": v and v.get("id"), "still": m.get("still") or m.get("poster"),
                     "audio": m.get("ab") or m.get("audio"),          # a version that sounds plays in its row: its A/B, else its mix
                     "vote": (v or {}).get("vote"), "held": bool(v) and v not in (c.get("versions") or []),
-                    "kind": j.get("kind"), "agent": j.get("backend"), "ts": e.get("ts")})
+                    "kind": AU.kind_of(j) if j else None, "agent": j.get("backend"), "ts": e.get("ts")})
         if len(out) >= limit:
             break
     # Total counts all outcomes, not just this response's limited page.

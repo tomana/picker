@@ -1361,6 +1361,27 @@ class AutoReviseTest(unittest.TestCase):
         self.assertEqual((self.AU.tab(s, "u")["comment"], self.AU.tab(s, "u")["kinds"]), ("", ["revise"]))
 
 
+    def test_a_tuning_is_a_third_kind_queued_as_a_revise_by_its_method(self):
+        # docs/TYPES.md: a type's tuning method is an AUTO kind beside revise and inspire; the kinds on go in turn
+        man = {"t": {"methods": [{"id": "make"}, {"id": "tune", "label": "tune", "tuning": "items"}]}}
+        with mock.patch.object(self.AU.C, "manifest", lambda t, cfg=None: man.get(t, {})):
+            self.assertEqual((self.AU.kinds_of("t"), self.AU.kinds_of("u")),
+                             (("revise", "inspire", "tune"), ("revise", "inspire")))
+            self.assertEqual(self.AU.clean_tab({"kinds": ["tune", "revise"]}, "t")["kinds"], ["revise", "tune"])
+            self.assertEqual(self.AU.clean_tab({"kinds": ["tune"]}, "u")["kinds"], [])
+            self.on(kinds=["revise", "tune"])
+            self.cards.append({"id": "ok2", "type": "t", "versions": [{"n": 1}], "pools": ["auto"]})
+            j1 = self.Q.get(self.tick()[0], root=self.root)
+            self.assertEqual((j1["kind"], j1.get("method")), ("revise", None))
+            self.Q.cancel(j1["id"], root=self.root)
+            j2 = self.Q.get(self.tick()[0], root=self.root)
+            self.assertEqual((j2["kind"], j2["method"], self.AU.kind_of(j2)), ("revise", "tune", "tune"))
+            self.assertTrue(j2["text"].startswith("Auto tune — "), j2["text"][:60])
+            self.assertEqual(self.AU.state["last"]["kind"], "tune")
+            three = ["revise", "inspire", "tune"]
+            self.assertEqual(self.AU.kind_for("t", three, [j2]), "revise")          # after the last, the first
+            self.assertEqual(self.AU.kind_for("t", three, [{**j2, "method": None}]), "inspire")
+
     def ptick(self, now=None):
         return self.AU.tick(cards=lambda: self.cards,
                             start=lambda t, j: self.started.append(j["id"]), root=self.root, now=now)

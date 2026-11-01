@@ -1,10 +1,10 @@
 import { withPage, api, assert, eq, sleep, BASE } from "./lib.mjs";
-export const name = "a type's other method — its own send beside revise on a version with items, a revise by it with the words and ×N; an item's diff above the text; the brief as configured names it";
+export const name = "a type's tuning — its own send beside revise on a version with items, a revise by its method with the words and ×N; an item's diff above the text; the brief as configured names it";
 
 const BUNDLE = "fx7a8b9c0d1e";                       // the fixture's bundle: items trans and comp1, comp1 the face
 const DIFF = 'comp1 from trans\n"warmer"\n\nMOVED\n  band 0 +2.0 dB          a long line, so the block scrolls sideways';
 const METHODS = [{ id: "make", label: "make", about: "the default" },
-                 { id: "tune", label: "tune", about: "small moves on the item on screen", send: "items" }];
+                 { id: "tune", label: "tune", about: "small moves on the item on screen", tuning: "items" }];
 
 export async function run(log) {
   const types = (await api("/api/types")).types;
@@ -71,7 +71,7 @@ export async function run(log) {
     await page.click(".sheet.big .acts > button.revn");
     await page.evaluate(() => [...document.querySelectorAll(".revpop .revpi")].find((b) => b.textContent === "3").click());
     n0 = sent.length;
-    await page.evaluate(() => [...document.querySelectorAll(".sheet.big .acts > button.way")].find((b) => !b.hidden).click());
+    await page.evaluate(() => [...document.querySelectorAll(".sheet.big .acts > button.tune")].find((b) => !b.hidden).click());
     await pick();
     const j = sent.at(-1) || {};
     eq(JSON.stringify([j.type, j.kind, j.card, j.version, j.item, j.method, j.count, j.text]),

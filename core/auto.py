@@ -20,7 +20,7 @@ DEFAULTS = {"on": False, "agent": "claude", "model": None, "types": [], "tabs": 
 # Kinds, keep, comment and criterion are per-tab; agent selection and quota limits remain shared.
 TAB = {"kinds": ["revise"], "keep": False, "comment": "", "criterion": "", "since": 0}
 # A pass restart makes every card due again from since.
-KINDS = ("revise", "inspire")
+KINDS = ("revise", "inspire")             # and a type's tuning method's id (kinds_of): a revise by that method
 MAX_CRITERION = 500
 MAX_COMMENT = 2000
 GROUP = "auto"
@@ -35,6 +35,23 @@ TEXT = {
 state: dict = {"why": "not started", "last": None, "ts": None, "of": {}}   # `of`: each tab's why
 
 
+def tuning(type_: str | None) -> dict | None:
+    """The type's tuning method (docs/TYPES.md, `methods`), or None."""
+    return next((m for m in (C.manifest(type_).get("methods") or []) if m.get("tuning") and m.get("id")), None) \
+        if type_ else None
+
+
+def kinds_of(type_: str | None) -> tuple:
+    t = tuning(type_)
+    return KINDS + ((t["id"],) if t and t["id"] not in KINDS else ())
+
+
+def kind_of(job: dict) -> str:
+    """A job's AUTO kind: its tuning method's id for a tuning, else its kind."""
+    t = tuning(job.get("type"))
+    return t["id"] if t and job.get("kind") == "revise" and job.get("method") == t["id"] else job.get("kind")
+
+
 def settings(prefs: dict | None = None) -> dict:
     prefs = P.fold() if prefs is None else prefs
     got = prefs.get("auto") if isinstance(prefs.get("auto"), dict) else {}
@@ -43,7 +60,7 @@ def settings(prefs: dict | None = None) -> dict:
     # Disabled AUTO retains no active tabs; stale saved selections must not restart unrelated work.
     out["types"] = [t for t in (out["types"] or []) if isinstance(t, str)] if out["on"] else []
     tabs = out["tabs"] if isinstance(out["tabs"], dict) else {}
-    out["tabs"] = {t: clean_tab(v) for t, v in tabs.items() if isinstance(t, str)}
+    out["tabs"] = {t: clean_tab(v, t) for t, v in tabs.items() if isinstance(t, str)}
     return out
 
 
@@ -51,11 +68,11 @@ def tab(s: dict, type_: str) -> dict:
     return {**TAB, **((s.get("tabs") or {}).get(type_) or {})}
 
 
-def clean_tab(v) -> dict:
+def clean_tab(v, type_: str | None = None) -> dict:
     v = v if isinstance(v, dict) else {}
     kinds = v.get("kinds") if isinstance(v.get("kinds"), list) else TAB["kinds"]
     since = v.get("since")
-    return {"kinds": [k for k in KINDS if k in kinds],
+    return {"kinds": [k for k in kinds_of(type_) if k in kinds],
             "keep": bool(v.get("keep", TAB["keep"])),
             "comment": clean_comment(v.get("comment")),
             "criterion": clean_criterion(v.get("criterion")),
@@ -173,13 +190,14 @@ def pick(lk: Look, rng=random) -> dict | None:
 
 
 def kind_for(type_: str, kinds: list, jobs: list[dict]) -> str:
-    """Alternate when both kinds are selected; with neither, default to revise."""
-    kinds = [k for k in KINDS if k in (kinds or [])]
+    """The selected kinds taken in turn, after the tab's last AUTO job's; with none, revise."""
+    kinds = [k for k in kinds_of(type_) if k in (kinds or [])]
     if len(kinds) < 2:
         return kinds[0] if kinds else "revise"
     last = max((j for j in jobs if j.get("group") == GROUP and j.get("type") == type_ and j.get("kind") in KINDS),
                key=lambda j: j.get("created") or 0, default=None)
-    return "inspire" if (last or {}).get("kind") == "revise" else "revise"
+    k = kind_of(last) if last else None
+    return kinds[(kinds.index(k) + 1) % len(kinds)] if k in kinds else kinds[0]
 
 
 def from_order(type_: str, crit: str, lk: Look, *, since: float = 0, root=None) -> tuple:
@@ -231,7 +249,8 @@ def _lead(type_: str, kind: str) -> str:
     from . import plugins as PG
     fn = PG.call(type_, "auto_text")
     got = fn(kind) if fn is not None else None
-    return got or TEXT[kind]
+    return got or TEXT.get(kind) or (f"Auto {kind} — the operator is not watching this one. Tune the card: small, "
+                                     f"measured moves on the finished thing, its source kept beside the tuning.")
 
 
 _ticking = threading.Lock()
@@ -301,6 +320,7 @@ def _tick(*, cards, start, now: float | None = None, root=None) -> list[str]:
             continue
         t = tab(s, type_)
         kind = kind_for(type_, t["kinds"], jobs)
+        tune = kind not in KINDS                   # a tuning: a revise by the type's tuning method
         all_cards = all_cards if all_cards is not None else cards()
         lk = look(type_, all_cards, jobs, kind=kind, since=t["since"], card_dir=card_dir)
         why = None
@@ -342,8 +362,8 @@ def _tick(*, cards, start, now: float | None = None, root=None) -> list[str]:
         version, trim = _base(card["id"]), (card.get("trim") if (card.get("origin") or {}).get("kind") == "recording"
                                              else None)
         try:
-            source = _hears(type_, card["id"], {"card": card["id"], "kind": kind, "version": version,
-                                                "item": None, "trim": trim})
+            source = _hears(type_, card["id"], {"card": card["id"], "kind": "revise" if tune else kind,
+                                                "version": version, "item": None, "trim": trim})
         except LookupError as e:
             _say(f"{type_}: {card.get('name') or card['id']} hears nothing ({e}) — passed over", type_)
             continue
@@ -356,9 +376,10 @@ def _tick(*, cards, start, now: float | None = None, root=None) -> list[str]:
             if not _still(s, type_, root):
                 _say(f"{type_}: its settings changed while AUTO looked — looking again", type_)
                 continue
-            job = Q.enqueue(type=type_, kind=kind, card=card["id"],
+            job = Q.enqueue(type=type_, kind="revise" if tune else kind, card=card["id"],
                             text=_lead(type_, kind) + commented(t["comment"]) + picked,
-                            backend=s["agent"], model=s["model"], group=GROUP, method=_method(type_), version=version,
+                            backend=s["agent"], model=s["model"], group=GROUP,
+                            method=kind if tune else _method(type_), version=version,
                             source=source, trim=trim, keep=t["keep"], root=root)
         T.emit("auto", "auto.queued", job=job["id"], card=card["id"], type=type_, kind=kind,
                agent=s["agent"])

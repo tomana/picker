@@ -71,7 +71,7 @@ export function poolHead(n) {
 /* Preserve the full tab comment and distinguish absent instructions from empty output. */
 
 export function autoLine(words, kinds = ["revise"]) {
-  const k = kinds.length ? kinds.join(" and ") : "revise";
+  const k = kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} and ${kinds.at(-1)}` : kinds[0] || "revise";
   return words ? `[Comment, ${k}] ${words}` : `[No comment, free ${k}]`;
 }
 

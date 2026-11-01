@@ -34,7 +34,7 @@ there is no live compatibility layer.
 | `sync` | | `{"argv": ["{python}", "sync.py"], "cwd": "."}`: its sync script; absent: the runner writes its cards itself |
 | `plugin` | | its plugin module (below) |
 | `lanes` | | `"by_agent"`: a runner per agent, so jobs for different agents do not block each other; absent: one job at a time |
-| `methods`, `default_method` | | the ways a job can be done (for example, `bundle`): `{id, label, about}` each; a send uses the default. A method with `send` gets its own button beside revise on the open card, a revise done that way with the same words and ×N: `true` on every version, `"items"` only on a version that has items |
+| `methods`, `default_method` | | the ways a job can be done (for example, `bundle`): `{id, label, about}` each; a send uses the default. One method may be the type's **tuning** (`"tuning": true`, or `"items"`: only on a version that has items): small measured moves on the finished card, its source kept beside the result. It gets a button beside revise on the open card (the same words and ×N) and a kind in AUTO beside revise and inspire; either queues a revise by that method |
 | `name_prefix` | | its cards' short names are shown as `<prefix>:<name>` (for example, `m:loop1`) and work wherever an id does |
 | `survey_tools` | | commands AUTO's survey agent may run (for example, timing tools) |
 | `capabilities` | | what its cards can do in the page (below) |
@@ -115,7 +115,7 @@ picker's tree on `PYTHONPATH`, one at a time per type (a lock in the picker's st
 | `start(S)` | the scheduler starts |
 | `split(card, k, S)`, `duplicate(card, k, S)`, `merge(cards, S)` | what a version is in its research; the picker does the checks, the sync, the votes following their versions and the auto pools |
 | `hears(card, job, S)` | a send is about to be queued, or the open card asks |
-| `auto_text(kind)` | AUTO's first words to a job of this type (else core's) |
+| `auto_text(kind)` | AUTO's first words to a job of this type (else core's); `kind` is `revise`, `inspire` or the tuning's id |
 | `auto_eligible(card, kind)` | whether AUTO may make `kind` from the card (else: a recording only inspires) |
 
 `S`, the services, is the plugin's only way into the picker: `config`, `stores` (`card_dir(id)`, `cards()`,

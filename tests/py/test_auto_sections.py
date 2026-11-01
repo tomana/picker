@@ -133,6 +133,17 @@ class AutoModel(unittest.TestCase):
             self.assertEqual(self.c.put("/api/auto", json={"for": "tt", "criterion": "slowest first"}).status_code, 200)
             self.assertGreater(self.saved[-1]["tabs"]["tt"]["since"], 5.0)
 
+    def test_a_tabs_tuning_is_one_of_its_kinds_and_no_other_tabs(self):
+        from unittest import mock
+        from api import auto as AA
+        man = {"tt": {"methods": [{"id": "make"}, {"id": "tune", "label": "tune", "tuning": True}]}}
+        with (mock.patch.object(AA, "_auto_types", return_value=["tt", "uu"]),
+              mock.patch.object(AU.C, "manifest", lambda t, cfg=None: man.get(t, {}))):
+            self.assertEqual(self.c.put("/api/auto", json={"for": "tt", "kinds": ["tune", "revise"]}).status_code, 200)
+            self.assertEqual(self.saved[-1]["tabs"]["tt"]["kinds"], ["revise", "tune"])
+            self.assertEqual(self.c.put("/api/auto", json={"for": "uu", "kinds": ["tune"]}).status_code, 400)
+            self.assertIn("tune", self.c.get("/api/auto?type=tt").get_json()["lead"])
+
     def test_a_runners_kick_makes_auto_look_now(self):
         from unittest import mock
         with mock.patch.object(AU, "kick") as kick:

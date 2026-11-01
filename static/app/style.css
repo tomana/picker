@@ -357,7 +357,7 @@ body { background:var(--ground) }
 .acts > button.seesb.warn { color:var(--warn) }
 
 .acts > button.revn { flex:none; width:44px; padding:0; font-size:14px; font-weight:600 }
-.acts > button.way[hidden] { display:none }
+.acts > button.tune[hidden] { display:none }
 .acts > button.revn::after { content:"▴"; font-size:22px; line-height:1; color:var(--mut); margin-left:3px }
 .acts > button.revn.many { border-color:#8f8f8f; background:#3a3a3a }
 

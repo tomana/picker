@@ -37,6 +37,11 @@ export function build() {
   const typeShort = (t) => (TYPES[t] || {}).short || typeLabel(t);
   const cap = (t, k) => ((TYPES[t] || {}).capabilities || {})[k];
   const namePrefix = (t) => (TYPES[t] || {}).name_prefix || null;
+  // a type's tuning method (docs/TYPES.md): an AUTO kind beside revise and inspire, a job queued as a revise by it
+  const tuningOf = (t) => (TYPES[t] || {}).tuning || null;
+  const kindWord = (t, k) => (tuningOf(t) && k === tuningOf(t).id ? tuningOf(t).label || k : k);
+  const jobWord = (q) => (tuningOf(q.type) && q.method === tuningOf(q.type).id ? kindWord(q.type, q.method) : q.kind);
+  const jobIcon = (q, size) => (jobWord(q) !== q.kind ? glyph("sliders", size) : kindIcon(q.kind, size));
 
   /* How far the dark layer reaches above .cardsec: more than any header
      can be, so the top of the page is always covered. */
@@ -1043,7 +1048,7 @@ export function build() {
     // AUTO's row says where it works: the card's name where it carries its tab's prefix (h:…), else the tab first
     const where = ref && namePrefix(q.type) && ref.startsWith(`${namePrefix(q.type)}:`) ? ref
       : [typeShort(q.type), ref || q.card].filter(Boolean).join(" · ");
-    const title = [kindIcon(q.kind, 15),
+    const title = [jobIcon(q, 15),
 
       q.count > 1 ? el("b.qcount", { text: `×${q.count}` }) : null,
       el("span", { text: auto ? `AUTO · ${where}` : q.text || plain || "(no note)" })].filter(Boolean);
@@ -2354,16 +2359,24 @@ export function build() {
     const on = autoIsOn(t);
     const who = autoWho(s.agent, s.model);
 
-    let mode = (own.kinds || []).includes("inspire") ? ((own.kinds || []).includes("revise") ? "both" : "inspire") : "revise";
+    // the kinds, each on or off, the ones on taken in turn: revise, inspire, and the tab's tuning
+    const ALL = ["revise", "inspire", ...(tuningOf(t) ? [tuningOf(t).id] : [])], word = (k) => kindWord(t, k);
+    const picked = new Set((own.kinds || []).filter((k) => ALL.includes(k)));
+    if (!picked.size) picked.add("revise");
     const kindRow = el("div.akinds.asegbar");
-    const paintKinds = () => kindRow.replaceChildren(...["revise", "inspire", "both"].map((k) => {
-      const b = el("button.aseg.akind" + (k === mode ? ".on" : ""), { type: "button", text: k,
-        title: k === "both" ? "a revise and an inspire, by turns" : `every job a ${k}` });
-      b.onclick = () => { mode = k; paintKinds(); };
+    const paintKinds = () => kindRow.replaceChildren(...ALL.map((k) => {
+      const b = el("button.aseg.akind" + (picked.has(k) ? ".on" : ""), { type: "button", text: word(k),
+        title: !picked.has(k) ? `add ${word(k)}: the kinds on are taken in turn`
+          : picked.size > 1 ? `${word(k)}, in turn with the others — tap to leave it out` : `every job a ${word(k)}` });
+      b.onclick = () => {
+        if (!picked.has(k)) picked.add(k);
+        else if (picked.size > 1) picked.delete(k);
+        paintKinds();
+      };
       return b;
     }));
     paintKinds();
-    const kindsOf = () => (mode === "both" ? ["revise", "inspire"] : [mode]);
+    const kindsOf = () => ALL.filter((k) => picked.has(k));
     const keep = el("input.akeepbox", { type: "checkbox" });
     keep.checked = !!own.keep;
     const keepRow = el("label.akeep", { title: "what it makes stays in AUTO's list, out of the stack, until you vote it up" },
@@ -2519,7 +2532,7 @@ export function build() {
     const name = `AUTO ${typeShort(t)}`;
 
     let acted = false;
-    const snap = () => JSON.stringify([norm(crit.value), instr.value.trim(), who.get(), who.model(), mode, keep.checked]);
+    const snap = () => JSON.stringify([norm(crit.value), instr.value.trim(), who.get(), who.model(), kindsOf(), keep.checked]);
     let was = snap();
     autoClosed = () => {
       if (acted) return;
@@ -2542,31 +2555,34 @@ export function build() {
       } catch (e) { toast(`${name}: ${e.message}`); }
     };
     const persp = () => {
-      return `${kindsOf().join(" and ")}` + (keep.checked ? ", kept in the list until voted" : "") +
+      return andList(kindsOf().map(word)) + (kindsOf().length > 1 ? " in turn" : "") + (keep.checked ? ", kept in the list until voted" : "") +
         (instr.value.trim() ? ", with your comment" : ", no comment") +
         (norm(crit.value) ? `, in the order for «${norm(crit.value).slice(0, 40)}»` : "");
     };
 
     const lead = cur.lead || {}, guides = {};
     const about = seesInfo("what each AUTO job hands the agent", async (box) => {
-      const a = who.get(), word = a === "antigravity" ? "agy" : a, ks = kindsOf();
+      const a = who.get(), aw = a === "antigravity" ? "agy" : a, ks = kindsOf();
       const c0 = norm(crit.value), comment = instr.value.trim();
       const from = `a card from the ${typeShort(t)} auto pool (none marked: every active card), ` +
         (c0 ? `the next in the order for «${c0}»` : "picked at random") +
         ", at its newest version not voted down";
-      const made = (k) => (k === "revise" ? "to make its next version" : "to make a new card from it");
+      const made = (k) => (k === "revise" ? "to make its next version" : k === "inspire" ? "to make a new card from it"
+        : "to tune it: a new version, its source kept beside the tuning");
       const said = (k) => (lead[k] ? `, with AUTO's words: "${lead[k]}"` : "");
+      const sent = (k) => (k === "revise" || k === "inspire" ? { kind: k } : { kind: "revise", method: k });
       for (const k of ks) if (!(`${a}|${k}` in guides))
-        guides[`${a}|${k}`] = guideFiles(t, { agent: a, kind: k }).then((fs) => (guides[`${a}|${k}`] = fs));
+        guides[`${a}|${k}`] = guideFiles(t, { agent: a, ...sent(k) }).then((fs) => (guides[`${a}|${k}`] = fs));
       const gs = ks.map((k) => guides[`${a}|${k}`]);
       box.replaceChildren(
-        el("div", {}, [el("b", { text: ks[0] }), ` hands ${word} ${from}, ${made(ks[0])}${said(ks[0])}`]),
-        ...(ks[1] ? [el("div", {}, [el("b", { text: ks[1] }), `, by turns, hands it a card the same way, ${made(ks[1])}${said(ks[1])}`])] : []),
+        el("div", {}, [el("b", { text: word(ks[0]) }), ` hands ${aw} ${from}, ${made(ks[0])}${said(ks[0])}`]),
+        ...ks.slice(1).map((k) => el("div", {}, [el("b", { text: word(k) }),
+          `, by turns, hands it a card the same way, ${made(k)}${said(k)}`])),
         el("div.smut", { text: `With them: ${andList(["your votes on the card",
           comment ? `your comment as its direction, "${comment.length > 90 ? `${comment.slice(0, 88)}…` : comment}", ` +
                     "which wins where it and the votes disagree" : null,
           c0 ? "why the order put the card next" : null].filter(Boolean))}.` +
-          (keep.checked ? " What it makes stays in AUTO's list until you vote it up." : "") + guideSaid(ks, gs) }));
+          (keep.checked ? " What it makes stays in AUTO's list until you vote it up." : "") + guideSaid(ks.map(word), gs) }));
       return gs.every(Array.isArray) ? null : Promise.all(gs);
     });
     foot.replaceChildren(about, ...(on
@@ -2600,7 +2616,7 @@ export function build() {
       const own = autoTab(type);
       const words = (TYPES[type] || {}).auto_placeholder || {};
       const line = live ? words.summary || "what AUTO will do"
-        : on ? `${who} · making from the ${typeShort(type)} auto pool` : autoLine((own.comment || "").trim(), own.kinds);
+        : on ? `${who} · making from the ${typeShort(type)} auto pool` : autoLine((own.comment || "").trim(), (own.kinds || []).map((k) => kindWord(type, k)));
       if (drawn !== `${open}|${on}|${who}|${line}`) {
         drawn = `${open}|${on}|${who}|${line}`;
         const head = panelHead({ label: "AUTO", open, status: { on, who },
@@ -3518,8 +3534,8 @@ export function build() {
 
     const stages = el("div.qstages");
     const head = el("div.shead", {}, [
-      kindIcon(q.kind, 16),
-      el("div.t", { text: `${q.kind}${q.card ? " · " + q.card : ""}` }),
+      jobIcon(q, 16),
+      el("div.t", { text: `${jobWord(q)}${q.card ? " · " + q.card : ""}` }),
       closeBtn("job"),
     ]);
     const meta = el("div.qmeta");
@@ -4400,16 +4416,12 @@ export function build() {
     ins.onclick = ask("inspire", ins);
     rev.onclick = ask("revise", rev);
     hold(ins); hold(rev);
-    // the type's other methods with `send`: each a revise done that way, beside revise (docs/TYPES.md)
-    const dflt = (d.typeMethodDefault || {})[c.type];
-    const ways = isRec ? [] : ((d.typeMethods || {})[c.type] || []).filter((m) => m.send && m.id !== dflt).map((m) => {
-      const b = el("button.way", { type: "button", title: m.about || `a new version, by ${m.label || m.id}` },
-                   [glyph("sliders", 13), el("span", { text: m.label || m.id })]);
-      b.onclick = ask("revise", b, m);
-      hold(b);
-      return { m, b };
-    });
-    paintSends = () => { for (const { m, b } of ways) b.hidden = m.send === "items" && !itemsOf(sel).length; };
+    // the type's tuning: a revise by its method, beside revise ("items": on a version with items)
+    const tune = isRec ? null : tuningOf(c.type);
+    const tuneBtn = tune && el("button.tune", { type: "button", title: tune.about || `a tuned version, by ${tune.id}` },
+                               [glyph("sliders", 13), el("span", { text: kindWord(c.type, tune.id) })]);
+    if (tuneBtn) { tuneBtn.onclick = ask("revise", tuneBtn, tune); hold(tuneBtn); }
+    paintSends = () => { if (tuneBtn) tuneBtn.hidden = tune.tuning === "items" && !itemsOf(sel).length; };
     paintSends();
 
     const strip = el("div.stage", { hidden: "" });
@@ -4449,7 +4461,7 @@ export function build() {
       field, strip, pick,
 
       el("div.acts" + (isRec ? ".rec" : ""), {},
-         (isRec ? [seesBtn, clip, ins, howBtn] : [seesBtn, clip, ins, rev, ...ways.map((w) => w.b), howBtn])
+         (isRec ? [seesBtn, clip, ins, howBtn] : [seesBtn, clip, ins, rev, tuneBtn, howBtn])
            .filter((b) => b && (cap(c.type, "images") !== false || b !== clip))), desc,
     ].filter(Boolean));
 

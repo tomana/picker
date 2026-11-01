@@ -357,6 +357,7 @@ export async function load() {
     typeInfo: Object.fromEntries((types || []).map((t) => [t.type, {
       label: t.label || t.type, short: t.short || t.label || t.type, name_prefix: t.name_prefix || null,
       kind: t.kind || null, capabilities: t.capabilities || {}, auto_placeholder: t.auto_placeholder || null,
+      tuning: (t.methods || []).find((m) => m.tuning && m.id) || null,
 
       runs: (t.start || []).includes("--agent") ? t.start[t.start.indexOf("--agent") + 1] || null : (t.agents || [])[0] || null,
     }])),
