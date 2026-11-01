@@ -42,19 +42,23 @@ export function build() {
   const kindWord = (t, k) => (tuningOf(t) && k === tuningOf(t).id ? tuningOf(t).label || k : k);
   const jobWord = (q) => (tuningOf(q.type) && q.method === tuningOf(q.type).id ? kindWord(q.type, q.method) : q.kind);
   // the bottom of what is in sight: the visual viewport, and above the keyboard where it overlays the page
-  // (shell.html's interactive-widget=overlays-content resizes neither viewport; the VirtualKeyboard API says where it is)
+  // (shell.html's interactive-widget=overlays-content resizes neither viewport; the VirtualKeyboard API says where it is,
+  // or a host app whose WebView sees no keyboard says its height: --ime on <html> and an "ime" event)
   const sightBottom = () => {
     const vv = window.visualViewport, kb = navigator.virtualKeyboard && navigator.virtualKeyboard.boundingRect;
+    const host = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ime")) || 0;
     const b = vv ? vv.offsetTop + vv.height : innerHeight;
-    return kb && kb.height > 0 ? Math.min(b, kb.y) : b;
+    return host ? Math.min(b, innerHeight - host) : kb && kb.height > 0 ? Math.min(b, kb.y) : b;
   };
   const onKeyboard = (fn) => {
     if (window.visualViewport) window.visualViewport.addEventListener("resize", fn);
     if (navigator.virtualKeyboard) navigator.virtualKeyboard.addEventListener("geometrychange", fn);
+    addEventListener("ime", fn);
   };
   const offKeyboard = (fn) => {
     if (window.visualViewport) window.visualViewport.removeEventListener("resize", fn);
     if (navigator.virtualKeyboard) navigator.virtualKeyboard.removeEventListener("geometrychange", fn);
+    removeEventListener("ime", fn);
   };
   const jobIcon = (q, size) => (jobWord(q) !== q.kind ? glyph("mixer", size) : kindIcon(q.kind, size));
 
