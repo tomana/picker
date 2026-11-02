@@ -431,15 +431,17 @@ class AgentFailed(RuntimeError):
 
 class AgentLimited(AgentFailed):
     """Quota exhaustion and provider capacity are retryable, not broken wiring; queue a wait instead of failure."""
-    def __init__(self, result: AgentResult, until=None, busy: bool = False):
-        self.result, self.until = result, until
+    def __init__(self, result: AgentResult, until=None, busy: bool = False, inferred: bool = False):
+        # inferred: known from another job's wait (limited_until), not reported by the agent; it is not passed on
+        self.result, self.until, self.inferred = result, until, inferred
         self.quota_group = None
         with contextlib.suppress(ValueError):
             if not busy and spec(result.agent)["cli"] == "agy":
                 self.quota_group = AG.family(result.model)
         when = f" until {until.astimezone().strftime('%H:%M')}" if until else ""
         what = "'s model is at capacity" if busy else " is out of usage"
-        RuntimeError.__init__(self, f"{result.agent}{what}{when}: {result.tail()}"[:240])
+        why = "another job's agent said so" if inferred else result.tail()
+        RuntimeError.__init__(self, f"{result.agent}{what}{when}: {why}"[:240])
 
 
 # Provider capacity is transient: wait BUSY_WAIT and retry, not a quota failure.
@@ -671,6 +673,7 @@ def limited_until(agent: str, now: float | None = None, *, model=None, root=None
     later = [w["until"] for j in Q.jobs(root=root) if j["status"] == "waiting"
              for w in [j.get("waiting") or {}] if w.get("agent") == agent and (w.get("until") or 0) > now
              and not (w.get("why") or "").startswith(("session cap: ", "agent restricted: "))
+             and not w.get("inferred")              # only what an agent reported: an inferred wait fed back loops
              and (not is_agy or not (w.get("quota_group") or AG.family(j.get("model")))
                   or (w.get("quota_group") or AG.family(j.get("model"))) == group)]
     return max(later) if later else None
@@ -693,7 +696,7 @@ def run_job(name: str, prompt: str, cwd: Path, logfile: Path, *, prefix: list[st
     if back:
         raise AgentLimited(AgentResult(agent=name, model=c["model"], effort=None, exit=None,
                                        text="another job found it out"),
-                           until=datetime.fromtimestamp(back).astimezone())
+                           until=datetime.fromtimestamp(back).astimezone(), inferred=True)
     _, given = _job_steers()                  # run() adds the steers so far to the brief; the receipt shows them too
     rec = _receipt(name, s, prompt + steer_note(given), cwd, c["model"], c["effort"], prefix, reg)
     res = run(name, prompt, cwd, logfile, model=c["model"], effort=c["effort"], prefix=prefix, deadline=deadline,

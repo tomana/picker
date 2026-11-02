@@ -935,6 +935,31 @@ class Attempts(unittest.TestCase):
         self.assertEqual((j["status"], j["waiting"]["agent"]), ("waiting", "codex"))
         self.assertAlmostEqual(j["waiting"]["until"], until.timestamp() + 60, delta=1)
 
+    def test_a_limit_known_from_another_jobs_wait_holds_to_that_reset_and_is_not_passed_on(self):
+        # job 1's agent said: out until T. Job 2, knowing it from job 1's wait, waits for that reset, not a minute past
+        # it, and its wait is no report: with job 1's gone, job 2's holds no one (two such waits held each other off,
+        # a minute further each round, with no agent ever run)
+        import time as _t
+        from datetime import datetime
+        res = A.AgentResult(agent="codex", model="m", effort=None, exit=1, text="x")
+        until = datetime.fromtimestamp(_t.time() + 600).astimezone()
+        second = self.Q.enqueue(type="t", kind="seed", text="y", root=self.root)
+
+        def told(job, report):
+            raise A.AgentLimited(res, until)
+        self.W.run_once("t:r", ["t"], told, root=self.root)
+        reset = A.limited_until("codex", root=self.root)
+        self.assertAlmostEqual(reset, until.timestamp() + 60, delta=1)
+
+        def knows(job, report):
+            raise A.AgentLimited(res, datetime.fromtimestamp(reset).astimezone(), inferred=True)
+        self.W.run_once("t:r", ["t"], knows, root=self.root)
+        w = self.Q.get(second["id"], root=self.root)["waiting"]
+        self.assertEqual((w["until"], w.get("inferred")), (reset, True), "a minute added, or not marked")
+        self.assertAlmostEqual(A.limited_until("codex", root=self.root), reset, delta=0.01)
+        self.Q.cancel(self.job["id"], root=self.root)
+        self.assertIsNone(A.limited_until("codex", root=self.root), "an inferred wait was taken as a report")
+
     def test_the_next_attempt_is_told_what_the_last_one_left(self):
         import time as _t
         out = self.root / "work"

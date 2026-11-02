@@ -188,7 +188,8 @@ def fold(root: Path | None = None) -> dict:
                     j["status"] = "waiting"
                     j["waiting"] = {"agent": rec.get("agent"), "until": rec.get("until"),
                                     "why": rec.get("why"), "since": rec.get("ts"),
-                                    **({"quota_group": rec["quota_group"]} if rec.get("quota_group") else {})}
+                                    **({"quota_group": rec["quota_group"]} if rec.get("quota_group") else {}),
+                                    **({"inferred": True} if rec.get("inferred") else {})}
                     j["phase"] = None
         elif ev == "cancel":
             j = jobs[jid]
@@ -301,9 +302,10 @@ def due(j: dict, now: float | None = None) -> bool:
 
 
 def wait(job_id: str, *, agent: str, until: float, why: str = "", attempt: int, root: Path | None = None,
-         quota_group: str | None = None) -> None:
+         quota_group: str | None = None, inferred: bool = False) -> None:
+    """`inferred`: the limit was known from another job's wait, not reported by the agent (core/agents.limited_until)."""
     _append({"event": "wait", "id": job_id, "agent": agent, "until": until, "why": why[:400], "attempt": attempt,
-             **({"quota_group": quota_group} if quota_group else {})}, root)
+             **({"quota_group": quota_group} if quota_group else {}), **({"inferred": True} if inferred else {})}, root)
 
 
 def _if(job_id: str, ok, rec: dict, root: Path | None) -> bool:

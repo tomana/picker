@@ -89,11 +89,16 @@ def _work(job, researcher, fulfil, report, root):
         T.emit("worker", "job.stopped", researcher=researcher, error=f"{type(e).__name__}: {e}"[:200])
         print(f"[worker] {job['id']} stopped — paused or cancelled", flush=True)
     except (Deferred, A.AgentLimited) as d:
-        # Agent exhaustion defers the same job rather than failing it.
+        # Agent exhaustion defers the same job rather than failing it. A limit known from another job's wait waits
+        # for that same reset, not a minute past it, and is marked so it is not passed on: each such wait taken for a
+        # new report pushed the reset a minute on, and the jobs held each other off with no agent ever run
         quota_group = getattr(d, "quota_group", None)
+        inferred = bool(getattr(d, "inferred", False))
         if isinstance(d, A.AgentLimited):
-            d = Deferred(d.result.agent, d.until.timestamp() + 60 if d.until else time.time() + 15 * 60, str(d))
-        Q.wait(job["id"], agent=d.agent, until=d.until, why=d.why, attempt=n, root=root, quota_group=quota_group)
+            d = Deferred(d.result.agent, d.until.timestamp() + (0 if inferred else 60) if d.until
+                         else time.time() + 15 * 60, str(d))
+        Q.wait(job["id"], agent=d.agent, until=d.until, why=d.why, attempt=n, root=root, quota_group=quota_group,
+               inferred=inferred)
         T.emit("worker", "job.waiting", researcher=researcher, agent=d.agent,
                until=d.until, why=d.why)
     except Exception as e:
