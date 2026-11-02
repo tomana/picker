@@ -1314,11 +1314,9 @@ export function build() {
     },
     stop() { this._stopNodes(); this._paused = true; this.onended = null; this.ls = []; },
   };
-  function preloadBands(parts) { for (const p of parts) if (p.audio) B.buf(p.audio); }
-  /* Lanes play in step from decoded buffers, ~0.4 MB a second each: a 7-minute piece of eight lanes is over 1 GB,
-     slow to start and too much for a phone. A longer piece streams its mix (and a solo lane its own file) as the
-     AUTO list does; the lanes are decoded only when a mute or a taken-out lane needs them. */
-  const LANES_DECODED_S = 90;
+  /* Lanes play in step from decoded buffers, ~0.4 MB a second each: every lane fetched and decoded before the first
+     sound, slow over a phone's link (a long piece's are over 1 GB). So the open card streams its mix (a solo lane its
+     own file) as a tile does; the lanes are decoded only when a mute or a taken-out lane needs them. */
 
   let bandGen = 0;
   async function playBands(c, parts, { tick = null, done = null, from = 0, only = null, ver = null } = {}) {
@@ -1703,21 +1701,24 @@ export function build() {
 
     const abOn = !!cap(c.type, "ab") && !!((ver.media || {}).ab || (ver.media || {}).reference);
     const bandParts = controls && !abOn ? partsOf(c, version).filter((p) => p.kind === "voice" && p.audio && !p.archived) : [];
-    const long = (ver.duration || 0) > LANES_DECODED_S;
-    if (bandParts.length && !long) preloadBands(bandParts);
 
     const allCut = controls && !abOn && !bandParts.length
       && partsOf(c, version).some((p) => p.kind === "voice" && p.audio);
-    // a long piece plays its mix while it is the whole piece: no lane muted or taken out
-    const mixWhole = () => long && !!(ver.media || {}).audio
+    // the mix plays while it is the whole piece: no lane muted or taken out
+    const mixWhole = () => !!(ver.media || {}).audio
       && !partsOf(c, version).some((p) => p.kind === "voice" && p.archived)
       && !bandParts.some((p) => listen.muted.has(p.id));
-    const mixStreaming = () => long && owns(c, ver.id) && !listen.solo && listen.el === player.el;
+    const mixStreaming = () => owns(c, ver.id) && !listen.solo && listen.el === player.el;
+    // a mute while the mix streams: the mix plays on while the lanes load, then they take over from where it is
     const toLanes = () => {
-      const from = player.el.currentTime || 0;
-      toast("this piece is long: its lanes take a moment to load");
-      playBands(c, bandParts, { tick: lineIn(block), from, ver: ver.id,
-                                done: () => { if (repaint) repaint(); } }).then(() => { if (repaint) repaint(); });
+      B.actx().resume().catch(() => {});                       // in the tap: a phone may not let it start later
+      B.inUse = new Set(bandParts.map((p) => p.audio));        // not trimmed while their siblings decode
+      if (!bandParts.every((p) => B.sizes.has(p.audio))) toast("loading the lanes — the mute is heard once they're in");
+      Promise.all(bandParts.map((p) => B.buf(p.audio))).then(() => {
+        if (!mixStreaming()) return;                           // stopped, or something else plays, meanwhile
+        playBands(c, bandParts, { tick: lineIn(block), from: player.el.currentTime || 0, ver: ver.id,
+                                  done: () => { if (repaint) repaint(); } }).then(() => { if (repaint) repaint(); });
+      });
     };
 
     const block = abOn ? abBlock(c, ver, { controls, stop: stopAudio,
@@ -1746,14 +1747,10 @@ export function build() {
           if (repaint) repaint();
         } else if (act === "solo") {
           if (listen.solo === p.id) { stopAudio(); c.at = null; if (repaint) repaint(); }
-          else if (long) {
+          else {
             play(c, p.audio, { tick: lineIn(block), ver: ver.id, done: repaint });
             listen.solo = p.id;
             if (repaint) repaint();
-          } else {
-            playBands(c, bandParts.some((q) => q.id === p.id) ? bandParts : [p],
-                      { only: p.id, tick: lineIn(block), done: repaint })
-              .then(() => { if (repaint) repaint(); });
           }
         } else if (act === "src") {
           if (p.src) openCode(p);
@@ -1846,9 +1843,9 @@ export function build() {
           pausedAt.set(c.id, { ver: ver.id, at: autoplay.from / (ver.duration || autoplay.from + 1), secs: autoplay.from });
           startMix();
         } else if (sp && controls) {
-          playBands(c, bandParts.some((q) => q.id === sp.id) ? bandParts : [sp],
-                    { only: sp.id, tick: lineIn(block), done: repaint, ver: ver.id })
-            .then(() => { if (repaint) repaint(); });
+          play(c, sp.audio, { tick: lineIn(block), ver: ver.id, done: repaint });
+          listen.solo = sp.id;
+          if (repaint) repaint();
         } else startMix();
       });
       if (audio) {
