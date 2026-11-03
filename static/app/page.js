@@ -1751,7 +1751,14 @@ export function build() {
         } else if (act === "solo") {
           if (listen.solo === p.id) { stopAudio(); c.at = null; if (repaint) repaint(); }
           else {
-            play(c, p.audio, { tick: lineIn(block), ver: ver.id, done: repaint });
+            // from the playhead: this version playing (the mix, the lanes or another solo), or paused on it
+            const pa = pausedAt.get(c.id), q = (id) => ((partsOf(c, version).find((x) => x.id === id) || {}).time || {});
+            const now = owns(c, ver.id) && listen.el && Number.isFinite(listen.el.currentTime)
+              ? listen.el.currentTime + (listen.solo ? q(listen.solo).start || 0 : 0)
+              : pa && pa.ver === ver.id && pa.at > 0 && pa.at < 0.995 ? (pa.secs != null ? pa.secs : pa.at * (ver.duration || 0))
+              : 0;
+            const from = Math.max(0, now - ((p.time || {}).start || 0));
+            play(c, p.audio, { tick: lineIn(block), ver: ver.id, done: repaint, ...(from > 0.05 ? { from } : {}) });
             listen.solo = p.id;
             if (repaint) repaint();
           }

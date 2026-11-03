@@ -1,5 +1,5 @@
 import { withPage, assert, eq, sleep, showTab, api } from "./lib.mjs";
-export const name = "the open card plays as a tile does — ▶ streams the mix (no lane decoded), a solo lane streams its file, a mute loads the lanes while the mix plays on, and they take over from where it was";
+export const name = "the open card plays as a tile does — ▶ streams the mix (no lane decoded), a solo lane streams its file from where the mix was, a mute loads the lanes while the mix plays on, and they take over from where it was";
 
 const ID = "fx0a1b2c3d4e";
 const secs = (t) => { const m = /^(\d+):(\d+(?:\.\d+)?)$/.exec(t || ""); return m ? +m[1] * 60 + +m[2] : null; };
@@ -38,16 +38,21 @@ export async function run(log) {
     await sleep(800);
     assert(got.some((g) => g.startsWith("media ") && g.endsWith(new URL(v.media.audio, "http://x").pathname)), `▶ streams the mix: ${got.join(", ")}`);
     eq(laneFetched().length, 0, "▶ decodes no lane");
-    // a solo lane streams its own file
+    // a solo lane streams its own file, from where the mix is
+    const head = () => page.evaluate(() => (document.querySelector(".sheet.big .vblock .vline") || { dataset: {} }).dataset.t);
+    await sleep(900);
+    const tm = secs(await head());
+    assert(tm >= 1, `the mix plays: ${tm}`);
     got.length = 0;
     await page.$eval(".sheet.big .vblock button.vc.big[title='play this band alone']", (b) => b.click());
     await sleep(800);
     assert(got.some((g) => g.startsWith("media ") && g.endsWith(new URL(lanes[0].audio, "http://x").pathname)), `solo streams the lane: ${got.join(", ")}`);
     eq(laneFetched().length, 0, "solo decodes no lane");
+    const ts = secs(await head());
+    assert(ts >= tm, `the solo starts where the mix was (${tm} s), not at the top: ${ts} s`);
     await page.$eval(".sheet.big .vplay", (b) => b.click());           // the whole mix again
     await sleep(1500);
     // a mute while the mix plays: the lanes load, then take over from where the mix is
-    const head = () => page.evaluate(() => (document.querySelector(".sheet.big .vblock .vline") || { dataset: {} }).dataset.t);
     const t0 = secs(await head());
     assert(t0 >= 1, `the mix plays: ${t0}`);
     await page.$eval(".sheet.big .vblock button.vc.big.mute", (b) => b.click());
@@ -61,6 +66,6 @@ export async function run(log) {
     assert(seen.every((t, i) => t != null && t >= (i ? seen[i - 1] : t0)) && seen.at(-1) > t0 + 1.2,
            `the playhead keeps advancing across the mute: ${t0} → ${seen.join(" ")}`);
     assert(!errs.length, "page errors: " + errs.slice(0, 4).join(" | "));
-    log(`open: no lane decoded; ▶ streamed the mix; solo streamed its lane; a mute at ${t0} s loaded ${laneFetched().length} lanes, they started at ${starts.map((s) => s.toFixed(2)).join("/")} s; the playhead ${seen.join(" ")}`);
+    log(`open: no lane decoded; ▶ streamed the mix; solo at ${tm} s streamed its lane from ${ts} s; a mute at ${t0} s loaded ${laneFetched().length} lanes, they started at ${starts.map((s) => s.toFixed(2)).join("/")} s; the playhead ${seen.join(" ")}`);
   });
 }
