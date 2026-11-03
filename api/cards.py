@@ -607,6 +607,25 @@ def duplicate_card(cid):
     return jsonify({"ok": True, "card": new})
 
 
+@bp.post("/api/cards/<cid>/crop")
+def crop_card(cid):
+    """{version, item?, start, end}: that passage of the version (seconds) as a new card. Slow: it renders."""
+    from core import split as SP
+    cid = _safe(cid)
+    body = request.get_json(silent=True) or {}
+    try:
+        version, start, end = int(body.get("version")), float(body.get("start")), float(body.get("end"))
+    except (TypeError, ValueError):
+        abort(400, description="send {version, start, end}")
+    item = _safe(str(body["item"])) if body.get("item") else None
+    try:
+        new = SP.crop(cid, version, item, start, end)
+    except SP.Refused as e:
+        return jsonify({"ok": False, "description": str(e)}), 409
+    CAT.scan(max_age=0)
+    return jsonify({"ok": True, "card": new})
+
+
 # a job's images (api/queue): at most 12 MB each, of these types
 ATTACH_MAX = 12 * 1024 * 1024
 # Extension is chosen from the declared type, never from a client-supplied filename:

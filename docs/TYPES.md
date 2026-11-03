@@ -51,6 +51,7 @@ type's id.
 | `add` | `idea`, `recording`, or a list of these | *+ Add idea* (a seed from words), *+ Add recording*, or both |
 | `upload` | a URL | where an `add` containing `recording` posts the file (multipart `file`): its plugin's route, which makes the recording card |
 | `split`, `duplicate`, `merge` | `true` | a version taken out into a new stack, copied, or stacks put together: the plugin's functions of those names |
+| `crop` | `true` | ✂ in the open card: a passage of the version's item (its `media.audio` in the trim editor, snapped to its `beat` in seconds when the item has one: the start on the beat, whole bars of four) as a new card, by the plugin's `crop` |
 | `timeline` | `true` | the composition timeline leads the tab |
 | `hears` | `true` | the open card says what a send would hear (the plugin's `hears`), and a sent job keeps it |
 | `panel` | a URL | the type's own panel in AUTO's place: an ES module its plugin serves, whose `mount(hooks)` returns `{el, pause, refresh, busy}` (for example, an audio player) |
@@ -119,6 +120,7 @@ picker's tree on `PYTHONPATH`, one at a time per type (a lock in the picker's st
 | `routes(S)` → blueprints | the server starts: its HTTP routes, registered as they are |
 | `start(S)` | the scheduler starts |
 | `split(card, k, S)`, `duplicate(card, k, S)`, `merge(cards, S)` | what a version is in its research; the picker does the checks, the sync, the votes following their versions and the auto pools |
+| `crop(card, k, item, start, end, S)` | a passage (seconds) of version k's item (None: its face) as a new stack; returns its id. It may snap the span and may take a while (it renders); the picker syncs and carries the auto pools |
 | `hears(card, job, S)` | a send is about to be queued, or the open card asks |
 | `auto_text(kind)` | AUTO's first words to a job of this type (else core's); `kind` is `revise`, `inspire` or the tuning's id |
 | `auto_eligible(card, kind)` | whether AUTO may make `kind` from the card (else: a recording only inspires) |

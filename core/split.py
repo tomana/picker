@@ -15,7 +15,7 @@ def _plugin(card: dict, what: str):
     """The type's `what` (split, duplicate, merge): its manifest's capability and its plugin's function."""
     fn = P.call(card.get("type"), what) if C.capability(card.get("type"), what) else None
     if fn is None:
-        word = {"split": "split", "duplicate": "duplicated", "merge": "merged"}[what]
+        word = {"split": "split", "duplicate": "duplicated", "merge": "merged", "crop": "cropped"}[what]
         raise Refused(f"a {card.get('type')} card cannot be {word} here")
     return fn
 
@@ -94,6 +94,25 @@ def duplicate(cid: str, version: int) -> str:
     new = fn(card, version, P.services())
     RS.sync(card["type"])
     _carry_pools(cid, new, f"copied from {cid} v{version}")
+    return new
+
+
+def crop(cid: str, version: int, item: str | None, start: float, end: float) -> str:
+    """A passage (seconds) of version `version` as a new stack, from its item `item` or its face. The plugin cuts and
+    renders it, and may snap the span to the piece's beat. Returns the new card id; the source is untouched."""
+    f = ST.card_dir(cid) / "card.json"
+    if not f.is_file():
+        raise Refused(f"no card {cid!r}")
+    card = json.loads(f.read_text())
+    n = len(card.get("versions") or [])
+    fn = _plugin(card, "crop")
+    if not 1 <= version <= n:
+        raise Refused(f"{cid} has no v{version}")
+    if not 0 <= start < end:
+        raise Refused("the selection is empty")
+    new = fn(card, version, item, start, end, P.services())
+    RS.sync(card["type"])
+    _carry_pools(cid, new, f"cropped from {cid} v{version}")
     return new
 
 

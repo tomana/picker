@@ -1,4 +1,5 @@
-/* Save trims after movement settles; a full-length selection clears the trim. Decode a fine waveform in the background. */
+/* Save trims after movement settles; a full-length selection clears the trim. Decode a fine waveform in the background.
+   With a `beat` (s) the start sits on the beat and the length is whole bars of four, so the selection loops. */
 
 import { el, glyph, RECORDING_YELLOW } from "../dom.js";
 
@@ -35,11 +36,14 @@ function pathOf(cols) {
   return d;
 }
 
-export function trimEditor({ src, peaks, duration, trim, onSave }) {
+export function trimEditor({ src, peaks, duration, trim, onSave = null, onChange = null, beat = 0, actions = [],
+                             whole = "the whole recording" }) {
   const id = `trim${++_n}`;
   let dur = duration || 0;
   let a = trim ? trim.start : 0;
   let b = trim ? trim.end : dur;
+  const bar = beat > 0 ? beat * 4 : 0;
+  const onBeat = (t) => (beat > 0 ? Math.round(t / beat) * beat : t);
   let active = "b";
   let cols = decodeB64(peaks);
 
@@ -58,14 +62,15 @@ export function trimEditor({ src, peaks, duration, trim, onSave }) {
   rEnd.onclick = () => { active = "b"; paint(); };
 
   const play = el("button.tbtn.tplaybtn", { type: "button", title: "hear the selection" });
-  const left = el("button.tbtn", { type: "button", title: `nudge the active edge −${NUDGE} s` }, [glyph("prev", 18)]);
-  const right = el("button.tbtn", { type: "button", title: `nudge the active edge +${NUDGE} s` }, [glyph("next", 18)]);
-  const all = el("button.tbtn.tall", { type: "button", text: "all", title: "select the whole recording" });
+  const step = bar ? "a beat (the start) or a bar (the end)" : `${NUDGE} s`;
+  const left = el("button.tbtn", { type: "button", title: `nudge the active edge back ${step}` }, [glyph("prev", 18)]);
+  const right = el("button.tbtn", { type: "button", title: `nudge the active edge on ${step}` }, [glyph("next", 18)]);
+  const all = el("button.tbtn.tall", { type: "button", text: "all", title: `select ${whole}` });
 
   const root = el("div.trim", { style: `--ty:${RECORDING_YELLOW}` }, [
     wave,
     el("div.treads", {}, [rStart, el("span.tarrow", { text: "→" }), rEnd, rLen, saved]),
-    el("div.tbar", {}, [play, left, right, all]),
+    el("div.tbar", {}, [play, left, right, all, ...actions]),
   ]);
 
   const draw = () => {
@@ -96,12 +101,15 @@ export function trimEditor({ src, peaks, duration, trim, onSave }) {
     }
     rStart.textContent = fmt(a);
     rEnd.textContent = fmt(b);
-    rLen.textContent = `${(b - a).toFixed(1)} s${isAll() ? " · all" : ""}`;
+    const bars = bar ? Math.round((b - a) / bar) : 0;
+    rLen.textContent = `${(b - a).toFixed(1)} s${bars ? ` · ${bars} bar${bars > 1 ? "s" : ""}` : ""}${isAll() ? " · all" : ""}`;
+    if (onChange) onChange({ start: a, end: b });
   };
   const isAll = () => a <= 0.01 && b >= dur - 0.01;
 
   let saveT = 0;
   const save = () => {
+    if (!onSave) return;
     clearTimeout(saveT);
     saved.textContent = "";
     saveT = setTimeout(async () => {
@@ -114,8 +122,25 @@ export function trimEditor({ src, peaks, duration, trim, onSave }) {
     }, 500);
   };
 
-  const setA = (t) => { a = Math.max(0, Math.min(t, b - MIN)); };
-  const setB = (t) => { b = Math.min(dur, Math.max(t, a + MIN)); };
+  /* On a beat, an edge moves by whole bars against the other one, which stays. */
+  const setA = (t) => {
+    if (!bar) { a = Math.max(0, Math.min(t, b - MIN)); return; }
+    let k = Math.max(1, Math.round((b - t) / bar));
+    while (k > 1 && b - k * bar < -1e-6) k--;
+    a = Math.max(0, b - k * bar);
+  };
+  const setB = (t) => {
+    if (!bar) { b = Math.min(dur, Math.max(t, a + MIN)); return; }
+    let k = Math.max(1, Math.round((t - a) / bar));
+    while (k > 1 && a + k * bar > dur + 1e-6) k--;
+    b = Math.min(dur, a + k * bar);
+  };
+  const slideTo = (t, len) => {
+    const top = bar ? Math.floor((dur - len) / beat + 1e-6) * beat : dur - len;
+    a = Math.max(0, Math.min(top, onBeat(t)));
+    b = a + len;
+  };
+  if (bar && dur) { a = Math.max(0, onBeat(a)); setB(b); }
 
   const timeAt = (x) => {
     const r = wave.getBoundingClientRect();
@@ -146,9 +171,7 @@ export function trimEditor({ src, peaks, duration, trim, onSave }) {
     if (drag.what === "a") setA(t);
     else if (drag.what === "b") setB(t);
     else if (drag.what === "slide") {
-      const len = drag.b0 - drag.a0;
-      const na = Math.max(0, Math.min(dur - len, drag.a0 + (t - drag.t0)));
-      a = na; b = na + len;
+      slideTo(drag.a0 + (t - drag.t0), drag.b0 - drag.a0);
     }
     paint();
   });
@@ -165,12 +188,14 @@ export function trimEditor({ src, peaks, duration, trim, onSave }) {
   wave.addEventListener("pointercancel", () => { drag = null; });
 
   const nudge = (s) => {
-    if (active === "a") setA(a + s); else setB(b + s);
+    if (bar && active === "a") slideTo(a + s * beat, b - a);   /* the start a beat: the bars go with it */
+    else if (bar) setB(b + s * bar);
+    else if (active === "a") setA(a + s * NUDGE); else setB(b + s * NUDGE);
     paint(); save();
   };
-  left.onclick = () => nudge(-NUDGE);
-  right.onclick = () => nudge(+NUDGE);
-  all.onclick = () => { a = 0; b = dur; paint(); save(); };
+  left.onclick = () => nudge(-1);
+  right.onclick = () => nudge(+1);
+  all.onclick = () => { a = 0; b = dur; if (bar) setB(dur); paint(); save(); };
 
   const audio = new Audio();
   audio.preload = "auto";
@@ -207,7 +232,7 @@ export function trimEditor({ src, peaks, duration, trim, onSave }) {
   };
   play.onclick = () => (playing ? stop() : startAt(a));
   audio.addEventListener("loadedmetadata", () => {
-    if (!dur && isFinite(audio.duration)) { dur = audio.duration; if (!trim) b = dur; paint(); }
+    if (!dur && isFinite(audio.duration)) { dur = audio.duration; if (!trim) b = dur; if (bar) setB(b); paint(); }
   });
 
   if (dur && dur < FINE_MAX_S && window.AudioContext) {

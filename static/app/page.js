@@ -3900,6 +3900,7 @@ export function build() {
     const VIEW_NAME = { wholebody: "full body", newshort: "close-up" };
     let view = null;
     let trimEl = null;
+    let cropping = false, paintCropBtn = () => {};
     // a card playing on the grid goes on in the open card's player, from where it is
     let resume = listen.el && same(listen.card, c) && !listen.solo && !listen.loading
       && Number.isFinite(listen.el.currentTime) && !listen.el.paused ? { solo: null, from: listen.el.currentTime } : null;
@@ -4037,6 +4038,8 @@ export function build() {
         paintHears();
         return;
       }
+      paintCropBtn();
+      if (cropping && cropMedia()) return;
       if (typeof v === "boolean") showVideo = v;
       const vs = viewsOf(sel);
       if (vs.length < 2) view = null;
@@ -4559,6 +4562,53 @@ export function build() {
       } catch (e) { toast(`not duplicated: ${e.message}`); dupBtn.disabled = false; }
     };
 
+    /* ✂: the on-screen item's mix in the trim editor (snapped to its beat), and its passage as a new card. */
+    const cropBtn = el("button.cropbtn", { type: "button" }, glyph("crop", 18));
+    const cropAudio = () => { const it = itemAt(sel); return it && (it.media || {}).audio ? it : null; };
+    paintCropBtn = () => {
+      cropBtn.hidden = isRec || !cap(c.type, "crop") || !cropAudio();
+      if (cropBtn.hidden) cropping = false;
+      cropBtn.classList.toggle("on", cropping);
+      cropBtn.title = cropping ? "back to the bands" : "crop: a passage of this version as a new card";
+      cropBtn.setAttribute("aria-label", cropBtn.title);
+    };
+    cropBtn.onclick = () => { cropping = !cropping; paintMedia(); };
+    const cropMedia = () => {
+      const it = cropAudio(), ver = (c.versions || [])[sel] || {};
+      if (!it) return false;
+      stopAudio({ playlist: false });
+      let span = null;
+      const go = el("button.tbtn.tgo", { type: "button", text: "new card",
+                                         title: "this passage as a new card: its notes cut out and rendered" });
+      go.onclick = async () => {
+        if (!span) return;
+        go.disabled = true;
+        go.textContent = "cutting…";
+        try {
+          const r = await fetch(`/api/cards/${encodeURIComponent(c.id)}/crop`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ version: ver.n ?? sel + 1, item: it.id,
+                                   start: +span.start.toFixed(3), end: +span.end.toFixed(3) }) });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(b.description || `${r.status}`);
+          closeSheet("big");
+          if (d.reload) { await d.reload(onTypes()); paintGrid(); }
+          const nc = (d.cards || []).find((x) => x.id === b.card);
+          toast(`cropped → ${(nc && nc.name) || b.card}`);
+          if (nc) requestAnimationFrame(() => openCard(nc, d, spawnNow));
+        } catch (e) { toast(`not cropped: ${e.message}`); go.disabled = false; go.textContent = "new card"; }
+      };
+      mediaBox.replaceChildren(trimEditor({
+        src: it.media.audio, peaks: it.peaks, duration: it.duration || ver.duration, trim: null,
+        beat: it.beat || 0, onChange: (t) => { span = t; }, actions: [go], whole: "the whole piece" }));
+      paintItems();
+      viewRow.hidden = true;
+      paintHears();
+      return true;
+    };
+    { const ps = paintSplit; paintSplit = () => { ps(); paintCropBtn(); }; }
+    paintCropBtn();
+
     const dlBtn = el("button", { type: "button", title: "download as .m4a — this version, as you hear it" },
                      glyph("download", 18));
     dlBtn.hidden = !(c.versions || []).some((v) => (v.media || {}).audio || (v.parts || []).some((p) => p.audio));
@@ -4592,7 +4642,7 @@ export function build() {
       }, 300);
     };
 
-    tools.append(...[poolBtn, arch, dupBtn, splitBtn, dlBtn].filter(Boolean));
+    tools.append(...[poolBtn, arch, dupBtn, splitBtn, cropBtn, dlBtn].filter(Boolean));
 
     const anyViews = Array.from({ length: n }, (_, i) => viewsOf(i).length > 1).some(Boolean);
     const anyItems = Array.from({ length: n }, (_, i) => itemsOf(i).length > 0).some(Boolean);
