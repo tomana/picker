@@ -2,7 +2,7 @@
 
 import { el, usageBar, iconBtn, autoStrip, autoLine, poolHead, voteCells, listWhen, cardMedia, thumb,
          scrollIndicator, glyph, kindIcon, panelHead, RECORDING_YELLOW, playGlyphs, madeChips,
-         infoBubble, closeBubble } from "./dom.js";
+         infoBubble, closeBubble, dragScrollX } from "./dom.js";
 import { voiceBlock, waveSvg, stampLine, clock } from "./parts/voice.js";
 import { trimEditor } from "./parts/trim.js";
 import { nodeBlock, paramPanel } from "./parts/node.js";
@@ -4172,7 +4172,7 @@ export function build() {
       });
     };
 
-    if (n >= 1) { vrow = el("div.vrow"); paintPips(); }
+    if (n >= 1) { vrow = el("div.vrow"); dragScrollX(vrow); paintPips(); }
 
     const audit = el("button.cdlog", { type: "button", title: "the log: how this card was made", text: "log ›" });
     audit.onclick = () => openAudit(c);

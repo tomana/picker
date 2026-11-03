@@ -378,6 +378,35 @@ export function scrollIndicator(scroller, { width = 5, inset = 8 } = {}) {
   return { el: track, sync };
 }
 
+/* A sideways row with its scrollbar hidden: touch scrolls it, a mouse doesn't. A mouse drags it and a wheel turns it;
+   a drag doesn't also click the button it began on, and a wheel at the row's end scrolls the page. */
+export function dragScrollX(row) {
+  let id = null, x0 = 0, l0 = 0, moved = false;
+  row.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "mouse" || e.button) return;
+    id = e.pointerId; x0 = e.clientX; l0 = row.scrollLeft; moved = false;
+  });
+  row.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== id || (!moved && Math.abs(e.clientX - x0) < 5)) return;
+    if (!moved) { moved = true; try { row.setPointerCapture(id); } catch (_) {} }
+    row.scrollLeft = l0 - (e.clientX - x0);
+  });
+  const end = (e) => {
+    if (e.pointerId !== id) return;
+    id = null;
+    if (moved) setTimeout(() => { moved = false; }, 0);     // after the click this drag ends in
+  };
+  row.addEventListener("pointerup", end);
+  row.addEventListener("pointercancel", end);
+  row.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); } }, true);
+  row.addEventListener("wheel", (e) => {
+    if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;    // a sideways swipe on a trackpad: the row's own
+    const l = row.scrollLeft;
+    row.scrollLeft += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    if (row.scrollLeft !== l) e.preventDefault();
+  }, { passive: false });
+}
+
 /* Use one shared full-width toggle target for collapsible lead panels. */
 
 export function panelHead({ label, open = true, onToggle, status = null }) {
