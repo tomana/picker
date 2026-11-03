@@ -188,12 +188,13 @@ function tagName(lane, p, on) {
 /* Playhead positions are fractions; null means the card is not playing. */
 
 export function voiceBlock(parts, { max = VOICE_ROWS, at = null, duration = null,
-                                    controls = false, on = null, showCut = false,
+                                    controls = false, on = null, showCut = false, keep = null,
                                     state = null, tint = null, trim = null } = {}) {
   /* Expanded cards expose every audible band; cut bands stay recoverable and an all-cut tile remains visible. */
 
   const kept = parts.filter((p) => !p.archived);
-  const list = controls ? (showCut ? parts : kept) : (kept.length ? kept : parts).slice(0, max);
+  const list = controls ? (showCut ? parts : parts.filter((p) => !p.archived || (keep && keep(p))))
+    : (kept.length ? kept : parts).slice(0, max);
   const st = state || { muted: new Set(), solo: null };
   const b = el("div.vblock");
   if (controls && duration > 0) b.dataset.dur = String(duration);   /* Use CSS row properties, not inline tracks, so expanded cards can override the grid layout. */

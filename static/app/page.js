@@ -1186,6 +1186,8 @@ export function build() {
                    byTurn: false };
 
   const showCut = new Set();
+  /* Bands taken out on this page stay in view, struck through, so the same trash puts them back. */
+  const cutHere = new Set();
 
   const same = (a, b) => !!a && !!b && (a === b || (a.id != null && a.id === b.id));
   const owns = (c, ver = null) => !!listen.el && same(listen.card, c)
@@ -1729,6 +1731,7 @@ export function build() {
       playing: () => (owns(c, ver.id) ? listen.seg : null) }) : laneBlock(c, ver, {
       at: c.at, controls, duration: ver.duration, vn: version, state: listen,
       showCut: controls && showCut.has(c.id),
+      keep: controls ? (p) => cutHere.has(`${c.id}|${ver.id}|${p.id}`) : null,
 
       on: (act, p, btn) => {
 
@@ -1768,6 +1771,7 @@ export function build() {
           box.append(panel);
         } else if (act === "cut") {
 
+          if (!p.archived) cutHere.add(`${c.id}|${ver.id}|${p.id}`);
           if (!p.archived && listen.el === B && same(listen.card, c) && !listen.solo) B.setGain(p.id, 0);
           else if (!p.archived && mixStreaming()) { listen.muted.add(p.id); toLanes(); }
           writeSignal(c, d, { kind: "archive", voice: p.id, value: !p.archived, ...scoped },

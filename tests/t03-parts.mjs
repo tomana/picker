@@ -1,6 +1,6 @@
 import { withPage, showTab, ensurePanel, scratchArrangement, scratchPicker, openTab, api,
          assert, eq, sleep } from "./lib.mjs";
-export const name = "parts — ＋ appends, ✕ names the part, the open card scrolls";
+export const name = "parts — ＋ appends, ✕ names the part and a second ✕ puts it back, the open card scrolls";
 async function openBiggest(page) {
   const bundles = ((await api("/api/cards?type=fx_music")).cards || [])
     .filter((c) => (c.versions || []).some((v) => (v.items || []).length)).map((c) => c.id);
@@ -42,6 +42,10 @@ export async function run(log) {
         const b = JSON.parse(r.postData() || "{}");
         signals.push({ card: decodeURIComponent(m[1]), ...b });
         api(`/api/cards/${m[1]}`).then((card) => {
+          if (b.kind === "archive" && b.voice)                  /* answered as the store would fold it */
+            for (const v of card.versions || [])
+              for (const p of [...(v.parts || []), ...(v.items || []).flatMap((it) => it.parts || [])])
+                if (p.id === b.voice) p.archived = b.value;
           r.respond({ status: 200, contentType: "application/json", body: JSON.stringify(card) });
         }, (e) => r.respond({ status: 500, contentType: "text/plain", body: String(e) }));
       });
@@ -79,7 +83,22 @@ export async function run(log) {
       assert(sent && sent.card === opened && sent.voice && sent.value === true,
              `the ✕ sent: ${JSON.stringify(signals)}`);
       assert(was.has(sent.voice), `the ✕ names ${sent.voice}, not one of the card's parts`);
-      log(`✕ named ${sent.voice} (answered in the page)`);
+      const kept = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll(".sheet .vrowc")];
+        const t = rows[0].querySelector(".vcr .vc");
+        return { rows: rows.length, cut: rows[0].classList.contains("cut"), title: t.title, on: t.classList.contains("on") };
+      });
+      eq(kept.rows, rows, "the band taken out left the open card");
+      assert(kept.cut && kept.on && kept.title === "put this band back in the mix",
+             `the band taken out isn't shown as out: ${JSON.stringify(kept)}`);
+      await page.evaluate(() => document.querySelectorAll(".sheet .vrowc")[0].querySelector(".vcr .vc").click());
+      await sleep(900);
+      const back = signals.filter((x) => x.kind === "archive");
+      assert(back.length === 2 && back[1].voice === sent.voice && back[1].value === false,
+             `the second ✕ sent: ${JSON.stringify(back)}`);
+      eq(await page.evaluate(() => document.querySelectorAll(".sheet .vrowc")[0].classList.contains("cut")), false,
+         "the band put back still shows as out");
+      log(`✕ named ${sent.voice}; it stayed, struck through, and a second ✕ put it back (answered in the page)`);
       await page.evaluate(() => {
         document.querySelectorAll(".sheet .vrowc")[0]
           .querySelector('.vc[title="add this band to the timeline"]').click();
