@@ -197,10 +197,10 @@ def read_card(cid: str, *, detail: bool = False, d: Path | str | None = None, st
     return card
 
 
-def _request_images() -> dict[str, list[str]]:
+def _request_images(jobs: dict | None = None) -> dict[str, list[str]]:
     """Read request images from their single queue-media home, oldest request first; never copy them into cards."""
     out: dict[str, list[str]] = {}
-    for job in sorted(Q.fold().values(), key=lambda j: j.get("created") or 0):
+    for job in sorted((Q.fold() if jobs is None else jobs).values(), key=lambda j: j.get("created") or 0):
         if job.get("status") == "done" and job.get("result") and job.get("attachments"):
             # Only images that are there: a URL to a file that was removed draws a
             # broken tile and a 404 on every page that shows the card.
@@ -209,6 +209,17 @@ def _request_images() -> dict[str, list[str]]:
                 f"/media/queue/{job['id']}/{n}" for n in job["attachments"]
                 if (d / n).is_file())
     return out
+
+
+def _asks(card: dict, jobs: dict) -> dict:
+    """Each version's own ask, the words of the job that made it; AUTO's prompt is nobody's ask, so None.
+    A version whose job is unknown carries no key, and the page falls back to the card's lineage."""
+    vs = card.get("versions") or []
+    if not any(jobs.get(v.get("job")) for v in vs):
+        return card
+    def ask(j):
+        return None if j.get("group") == "auto" else (j.get("text") or "").strip() or None
+    return {**card, "versions": [{**v, "asked": ask(jobs[v["job"]])} if jobs.get(v.get("job")) else v for v in vs]}
 
 
 @bp.get("/api/cards/stamp")
@@ -506,8 +517,9 @@ def get_card(cid):
         abort(404)
     # A copy, for the same reason as list_cards: the cached dict must not learn
     # anything about another file.
-    return jsonify(with_need({**card, "attachments": _request_images().get(card["id"], [])
-                                                     + (card.get("attachments") or [])}))
+    jobs = Q.fold()
+    return jsonify(with_need({**_asks(card, jobs), "attachments": _request_images(jobs).get(card["id"], [])
+                                                                  + (card.get("attachments") or [])}))
 
 
 # Keep the writable signal vocabulary closed; unknown state is a caller error, not an extension hook.

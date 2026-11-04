@@ -4277,7 +4277,8 @@ export function build() {
       const vv = (c.versions || [])[n > 1 ? sel : 0] || {};
 
       const rat = n > 1 && v.rationale ? v.rationale : nar.rationale;
-      const why = (c.lineage || {}).why, shots = requestImages(c.attachments);
+      // the selected version's own ask (api/cards _asks); the card's first ask only where the version's job is unknown
+      const why = "asked" in vv ? vv.asked : (c.lineage || {}).why, shots = requestImages(c.attachments);
       const p = (t, cls = "") => el("div.cdp" + cls, { text: t });
       const vk = namePrefix(c.type) && c.name ? `:v${((c.versions || [])[sel] || {}).n ?? sel + 1}` : "";
 
