@@ -3,7 +3,7 @@
 import { el, usageBar, iconBtn, autoStrip, autoLine, poolHead, voteCells, listWhen, cardMedia, thumb,
          scrollIndicator, glyph, kindIcon, panelHead, RECORDING_YELLOW, playGlyphs, madeChips,
          infoBubble, closeBubble, dragScrollX } from "./dom.js";
-import { voiceBlock, waveSvg, stampLine, clock } from "./parts/voice.js";
+import { voiceBlock, waveSvg, stampLine, clock, firstSound } from "./parts/voice.js";
 import { trimEditor } from "./parts/trim.js";
 import { nodeBlock, paramPanel } from "./parts/node.js";
 import { abBlock, abFacts, abLength } from "./parts/ab.js";
@@ -1756,8 +1756,10 @@ export function build() {
             const now = owns(c, ver.id) && listen.el && Number.isFinite(listen.el.currentTime)
               ? listen.el.currentTime + (listen.solo ? q(listen.solo).start || 0 : 0)
               : pa && pa.ver === ver.id && pa.at > 0 && pa.at < 0.995 ? (pa.secs != null ? pa.secs : pa.at * (ver.duration || 0))
-              : 0;
-            const from = Math.max(0, now - ((p.time || {}).start || 0));
+              : null;
+            // nothing playing or paused here: from a second before the lane's own sound, not from the silence before it
+            const from = now == null ? Math.max(0, firstSound(p, ver.duration) - 1)
+              : Math.max(0, now - ((p.time || {}).start || 0));
             play(c, p.audio, { tick: lineIn(block), ver: ver.id, done: repaint, ...(from > 0.05 ? { from } : {}) });
             listen.solo = p.id;
             if (repaint) repaint();

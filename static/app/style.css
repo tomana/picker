@@ -1340,6 +1340,12 @@ span.qthumb { display:inline-block; background:var(--dip) }
                 grid-template-rows:repeat(2, minmax(0, 1fr)); gap:2px; align-items:stretch }
 .vrowc > .vcr .vc { width:100%; height:auto; min-width:0; min-height:19px }
 .vrowc.muted .lane { opacity:.35 }
+/* A lane list's heading sits in the first lane of its section or role, across the row. */
+.vrowc.headed { grid-template-rows:auto 1fr }
+.vrowc > .vhead { grid-column:1 / -1; display:flex; gap:10px; align-items:baseline; padding:8px 2px 1px;
+                  font-size:11px; color:#9a9a9a; letter-spacing:.03em }
+.vrowc > .vhead b { color:#e6e6e6; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.08em }
+.vblock > .vrowc.headed:not(:first-child) > .vhead.sec { margin-top:6px; padding-top:10px; border-top:1px solid #2e2e2e }
 .vrowc > .vcr .vc:not(.on) { color:#9a9a9a }
 .vrowc > .vcr .vc:disabled { opacity:.35 }
 

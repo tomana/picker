@@ -80,7 +80,9 @@ update; readers use one format rather than live migrators.
 
 Every part has `kind` (`shader`, `voice` or `node`), `id`, `label` and `enabled`, and usually `group` (a number:
 parts in one group play or draw together) and `src` (its source file in `media/`). A timed part has `time`:
-`{start, len}` in seconds, plus `layer` (a node's), or `gain`, `fadeIn`, `fadeOut` (a voice's). Each kind adds its own:
+`{start, len}` in seconds, plus `layer` (a node's), or `gain`, `fadeIn`, `fadeOut` (a voice's). `section` and `role`,
+both optional text, head the open card's lane list: a heading where `section` changes, a smaller one where `role`
+changes, so parts listed in order read as sections of grouped lanes. Each kind adds its own:
 - a **shader**: `mode` (its id in the renderer), `params` (its knobs), `puppet`, `skin`;
 - a **voice**: `audio` (its file in `media/`), `peaks` (its waveform, base64);
 - a **node**: `params`.

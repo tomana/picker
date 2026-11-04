@@ -48,6 +48,15 @@ function realPeaks(p) {
   }
 }
 
+/* Where a lane's own sound begins, in seconds into its file (its measured peaks); 0 when unknown. */
+export function firstSound(p, duration) {
+  const pk = realPeaks(p);
+  const len = p && p.time && p.time.len ? p.time.len : duration;
+  if (!pk || !pk.length || !(len > 0)) return 0;
+  const i = pk.findIndex((v) => v > 0.03);
+  return i > 0 ? (i / pk.length) * len : 0;
+}
+
 /* Use the same waveform geometry for bundle thumbnails and lanes. */
 
 export function waveSvg(peaks, h = 40, color = "#8a8a8a") {
@@ -145,7 +154,7 @@ function voiceLane(p, duration, h = LANE_VB, tint = null, trim = null) {
 
 /* Report control actions to the caller; renderers must not own API state. */
 
-function voiceRow(p, duration, on, state, tint = null, trim = null) {
+function voiceRow(p, duration, on, state, tint = null, trim = null, head = null) {
   const btn = (text, title, cls = "", act = null, disabled = false) => {
     const b = el("button.vc" + cls, { type: "button", title, "aria-label": title });
     if (typeof text === "string") b.textContent = text; else b.append(text);
@@ -157,7 +166,9 @@ function voiceRow(p, duration, on, state, tint = null, trim = null) {
   const soloed = state.solo === p.id;
   /* Solo plays one voice; mute affects that voice within whole-card playback. */
 
-  return el("div.vrowc" + (p.archived ? ".cut" : "") + (muted ? ".muted" : ""), {}, [
+  return el("div.vrowc" + (p.archived ? ".cut" : "") + (muted ? ".muted" : "") + (head ? ".headed" : ""), {}, [
+    head && el("div.vhead" + (head.section ? ".sec" : ""), {}, [head.section && el("b", { text: head.section }),
+                                 head.role && el("span", { text: head.role })].filter(Boolean)),
     btn(glyph(soloed ? "stop" : "play", 22), soloed ? "stop" : "play this band alone",
         ".big" + (soloed ? ".on" : ""), "solo"),
     tagName(voiceLane(p, duration, LANE_VB, tint, trim), p, on),
@@ -201,9 +212,15 @@ export function voiceBlock(parts, { max = VOICE_ROWS, at = null, duration = null
 
   b.style.setProperty("--rows", String(VOICE_ROWS));
   b.style.setProperty("--vn", String(list.length));
-  for (const p of list)
-    b.append(controls ? voiceRow(p, duration, on, st, tint, trim)
+  let prev = {};
+  for (const p of list) {
+    /* A heading where the lane list's section or role changes (docs/CARD_FORMAT.md). */
+    const head = controls && (p.section !== prev.section || p.role !== prev.role) && (p.section || p.role)
+      ? { section: p.section !== prev.section ? p.section : null, role: p.role } : null;
+    prev = p;
+    b.append(controls ? voiceRow(p, duration, on, st, tint, trim, head)
                       : voiceLane(p, duration, LANE_VB, tint, trim));
+  }
   if (at != null) {
     const line = el("i.vline");
     line.style.left = `${(at * 100).toFixed(1)}%`;
