@@ -41,6 +41,8 @@ export async function run(log) {
       await showTab(page, "music");
       assert(await page.$(".grid .addrec:not(.addidea)"), "Add recording is visible");
       assert(await page.$(".grid .addidea"), "Add idea is still visible");
+      assert(await page.$eval(".addrec:not(.addidea) input[type=file]", (e) => !e.hasAttribute("accept")),
+             "the file picker filters nothing: the server says what it can read");
       const [chooser] = await Promise.all([page.waitForFileChooser(), page.click(".addrec:not(.addidea) .phead-tog")]);
       const uploaded = page.waitForResponse((r) => r.url().endsWith("/api/music/upload") && r.request().method() === "POST");
       await chooser.accept([file]);

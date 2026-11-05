@@ -2541,10 +2541,10 @@ export function build() {
   }
   let addRecNote = "";
   function addRecordingRow(t, d) {
-    const pick = el("input", { type: "file", multiple: "", hidden: "",
-      accept: ".mp3,.m4a,.wav,.flac,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/flac" });
+    // No `accept`: a phone's picker can grey out a sound file whose stored type isn't listed. The server says what it can read.
+    const pick = el("input", { type: "file", multiple: "", hidden: "" });
     const lbl = el("span.phead-lbl", { text: addRecNote || "Add recording" });
-    const btn = el("button.phead-tog", { type: "button", title: "upload an mp3, m4a, wav or flac — it becomes a recording card" },
+    const btn = el("button.phead-tog", { type: "button", title: "upload a sound file — it becomes a recording card" },
                    [el("span.addrec-plus", { "aria-hidden": "true" }, [glyph("plus", null)]), lbl]);
     const say = (msg) => { addRecNote = msg; for (const e of document.querySelectorAll(".addrec:not(.addidea) .phead-lbl")) e.textContent = msg || "Add recording"; };
     btn.onclick = () => { if (!addRecNote) pick.click(); };
