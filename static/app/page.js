@@ -1706,9 +1706,11 @@ export function build() {
 
     const allCut = controls && !abOn && !bandParts.length
       && partsOf(c, version).some((p) => p.kind === "voice" && p.audio);
-    // the mix plays while it is the whole piece: no lane muted or taken out
+    // the mix plays while it leaves out exactly the lanes taken out (the server's cut mix names them) and none is muted
+    const cutOf = (u) => { try { return new URL(u, location.href).searchParams.get("cut") || ""; } catch (_) { return null; } };
     const mixWhole = () => !!(ver.media || {}).audio
-      && !partsOf(c, version).some((p) => p.kind === "voice" && p.archived)
+      && cutOf(ver.media.audio) === partsOf(c, version).filter((p) => p.kind === "voice" && p.archived)
+        .map((p) => p.id).sort().join(",")
       && !bandParts.some((p) => listen.muted.has(p.id));
     const mixStreaming = () => owns(c, ver.id) && !listen.solo && listen.el === player.el;
     // a mute while the mix streams: the mix plays on while the lanes load, then they take over from where it is
@@ -3881,8 +3883,11 @@ export function build() {
       if (!it) return c;
       const v = c.versions[sel];
       const vs = c.versions.slice();
+      // the face item's sound is the version's own, which the server makes cut-aware
+      const media = it.id === v.face_item ? { ...(v.media || {}) }
+        : { ...(v.media || {}), audio: (it.media || {}).audio || null, audio_full: undefined };
       vs[sel] = { ...v, id: `${v.id}/${it.id}`, parts: it.parts || [], duration: it.duration || v.duration,
-                  media: { ...(v.media || {}), audio: (it.media || {}).audio || null }, bundleItem: it.id };
+                  media, bundleItem: it.id };
       return { ...c, versions: vs };
     };
     const paintItems = () => {
