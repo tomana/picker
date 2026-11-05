@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Blueprint, Response, abort, jsonify, request, send_file
 
@@ -99,6 +100,10 @@ def _cut_out(lanes: list[dict]) -> tuple[list[dict], list[str]]:
             sorted(p["id"] for p in lanes if p.get("archived")))
 
 
+def _lane_list(lanes: list[dict]) -> str:
+    return quote(",".join(sorted(p["id"] for p in lanes)), safe=",")
+
+
 def _cut_mix(v: dict, cid: str) -> None:
     """Use a cut-aware URL with cut list and content identity, for the version and each of its items;
     preserve audio_full. All bands removed or a missing kept band makes audio unavailable, never silently
@@ -120,7 +125,7 @@ def _cut_mix(v: dict, cid: str) -> None:
                 m["audio_missing"] = missing
             else:
                 at = f"&item={item}" if item else ""
-                m["audio"] = f"/api/cards/{cid}/mix?version={v['n']}{at}&cut={','.join(cut)}&k={key}"
+                m["audio"] = f"/api/cards/{cid}/mix?version={v['n']}{at}&lanes={_lane_list(keep)}&k={key}"
 
 
 def read_card(cid: str, *, detail: bool = False, d: Path | str | None = None, stamp: int | None = None) -> dict | None:
@@ -741,6 +746,7 @@ def prewarm_thumbs(widths=(360,)) -> int:
 
 MIX_DIR = CONFIG.get().cache / "mix"
 MIX_CAP = 2 << 30                              # bytes of made mixes kept; the least recently played go first
+MIX_ENCODE = ["-c:a", "libmp3lame", "-b:a", "320k"]   # a second generation of the lanes' mp3: as little lost as can be
 RENDERS = threading.BoundedSemaphore(2)        # whole mixes made at once
 STREAMS = 2                                    # `from=` encoders at once; a newer one ends the oldest
 _keys: dict[str, threading.Lock] = {}          # one render per content key
@@ -756,7 +762,7 @@ def _mix_plan(cid: str, n, keep: list[dict]) -> tuple[list[Path], list[str], str
         f = ST.card_dir(_safe(cid)) / "media" / _safe(str(p["audio"]).split("/")[-1])
         (files if f.exists() else missing).append(f if f.exists() else p.get("id") or str(p["audio"]))
     sig = "|".join(f"{f.resolve()}:{f.stat().st_mtime_ns}:{f.stat().st_size}" for f in files)
-    return files, missing, hashlib.sha1(f"{cid}|{n}|{sig}".encode()).hexdigest()[:20]
+    return files, missing, hashlib.sha1(f"{cid}|{n}|{' '.join(MIX_ENCODE)}|{sig}".encode()).hexdigest()[:20]
 
 
 def _version_of(cid: str, n) -> dict:
@@ -814,7 +820,7 @@ def _render(files: list[Path], key: str) -> Path:
         tmp = out.with_suffix(f".{os.getpid()}.tmp.mp3")
         with RENDERS:
             r = subprocess.run(["ffmpeg", "-v", "error", "-y", *_amix(files),
-                                "-threads", "1", "-c:a", "libmp3lame", "-q:a", "2", str(tmp)],
+                                "-threads", "1", *MIX_ENCODE, str(tmp)],
                                capture_output=True, text=True, timeout=180)
         if r.returncode:
             tmp.unlink(missing_ok=True)
@@ -864,7 +870,7 @@ def _stream(files: list[Path], at: float, made: Path | None):
     """The sum from `at` s as mp3, encoded while it is sent: the made file cut from there, or the lanes mixed
     from there. Only the newest STREAMS run: an older one's listener has moved on."""
     src = (["-ss", f"{at:.3f}", "-i", str(made), "-c:a", "copy"] if made
-           else [*_amix(files, at), "-threads", "1", "-c:a", "libmp3lame", "-q:a", "2"])
+           else [*_amix(files, at), "-threads", "1", *MIX_ENCODE])
     proc = subprocess.Popen(["ffmpeg", "-v", "error", *src, "-write_xing", "0", "-f", "mp3", "-"],
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     with _guard:
@@ -910,11 +916,11 @@ def mix_file(cid: str, n: int, item: str | None = None, lanes: list[str] | None 
 def cut_audio(cid: str, n: int) -> dict | None:
     """Return None only when no band is cut; otherwise return cut-aware URL and file.
     Unavailable cuts raise LookupError and encoding failures RuntimeError; never fall back to the full mix."""
-    _, cut = _cut_out(_lanes(_version_of(cid, n)) or [])
+    keep, cut = _cut_out(_lanes(_version_of(cid, n)) or [])
     if not cut:
         return None
     files, key = _plan(cid, n)
-    return {"url": f"/api/cards/{cid}/mix?version={n}&cut={','.join(cut)}&k={key}", "path": _render(files, key)}
+    return {"url": f"/api/cards/{cid}/mix?version={n}&lanes={_lane_list(keep)}&k={key}", "path": _render(files, key)}
 
 
 def _item_arg() -> str | None:
@@ -926,9 +932,9 @@ def _item_arg() -> str | None:
 
 @bp.get("/api/cards/<cid>/mix")
 def cut_mix(cid):
-    """The sum of a version's lanes (an item's with `item=`): the ones named in `lanes=a,b`, else the kept ones
-    (a `cut=` only names the file). `from=S` streams it from S s at once and makes the whole file behind it. A
-    HEAD is 200 when the file is made, else 202, and starts making it. `X-Mix-Key` is the content key."""
+    """The sum of a version's lanes (an item's with `item=`): the ones named in `lanes=a,b`, else the kept ones.
+    `from=S` streams it from S s at once and makes the whole file behind it. A HEAD is 200 when the file is made,
+    else 202, and starts making it. `X-Mix-Key` is the content key."""
     cid = by_ref(cid)
     a = request.args
     lanes = [x for x in a.get("lanes", "").split(",") if x] if "lanes" in a else None

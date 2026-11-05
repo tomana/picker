@@ -32,9 +32,10 @@ export async function run(log) {
       return true;
     });
     assert(opened, "fx0a1b2c3d4e is on the grid");
-    const btn = ".sheet.big button.vc[title^='open its source']";
+    const btn = ".sheet.big .np-strip";
     await page.waitForSelector(btn, { timeout: 10000 });
-    await page.$eval(btn, (b) => b.click());
+    await page.$eval(btn, (s) => s.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    await page.$eval(".np-mi[data-act='code']", (b) => b.click());
     await page.waitForSelector(".sheet.code:not([hidden]) .codebody", { timeout: 8000 });
     const got = await page.evaluate(() => {
       const s = document.querySelector(".sheet.code");
@@ -68,7 +69,8 @@ export async function run(log) {
     const shut = () => page.evaluate(() => [document.querySelector(".sheet.code").hidden,
                                             document.querySelector(".sheet.big").hidden].join());
     const reopen = async () => {
-      await page.$eval(btn, (b) => b.click());
+      await page.$eval(btn, (s) => s.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+      await page.$eval(".np-mi[data-act='code']", (b) => b.click());
       await page.waitForSelector(".sheet.code:not([hidden]) .codebody", { timeout: 8000 });
     };
     await page.keyboard.press("Escape");

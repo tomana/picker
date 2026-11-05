@@ -1,9 +1,10 @@
 /* The open card's sound: two <audio> elements, one live and one next, and one clock. A program change readies `next`
    a little ahead of where the live one is, waits for the live one to get there, and crossfades; the piece never
    stops. Nothing is decoded in the page: a sum of lanes the server hasn't made yet is streamed from the position
-   (`from=`) while it makes the file, and the engine moves onto the file once it exists. */
+   (`from=`) while it makes the file, and the engine moves onto the file once it exists.
+   A jump or a stop on a sounding waveform is a click, so nothing seeks or pauses until its element is silent. */
 
-const FADE = 40;                         // ms, a crossfade or a seek's dip
+const FADE_OUT = 45, FADE_IN = 60;       // ms: too fast to hear as a fade, too slow to be a step
 const POLL = 1000;                       // ms between asks whether a streamed sum's file is made
 
 export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = () => {} } = {}) {
@@ -13,14 +14,19 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
     return { el, key: null, url: null, offset: 0, seekable: true, prog: null };
   };
   let live = make(), next = make();
-  let playing = false, pos = 0, raf = 0, gen = 0, lead = 0.35, seeking = false, wantSeek = null, poll = 0;
-  let jumpTo = null;                     // a seek on a stream: where it is going, until the new stream sounds
+  let playing = false, pos = 0, raf = 0, gen = 0, lead = 0.35, landing = false, wantSeek = null, poll = 0;
+  let jumpTo = null;                     // a seek: where it is going, until it is there
 
   const now = () => (jumpTo != null ? jumpTo : live.key ? live.offset + (live.el.currentTime || 0) : pos);
 
-  const ramp = (el, to, ms = FADE) => new Promise((done) => {
+  const fades = new WeakMap();           // a new ramp on an element takes over from the one running
+  const ramp = (el, to, ms) => new Promise((done) => {
+    const id = (fades.get(el) || 0) + 1;
+    fades.set(el, id);
     const from = el.volume, t0 = performance.now();
+    if (from === to) { done(); return; }
     const step = () => {
+      if (fades.get(el) !== id) { done(); return; }
       const k = Math.min(1, (performance.now() - t0) / ms);
       try { el.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch (_) {}
       if (k < 1) setTimeout(step, 8); else done();
@@ -55,7 +61,7 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
 
   /* The URL that plays `prog` from `at`: a made file (seekable), or a sum streamed from `at`. */
   async function resolve(prog, at) {
-    if (prog.kind !== "sum") return { url: prog.url, offset: 0, seekable: true, made: true };
+    if (prog.kind !== "sum") return { url: prog.url, offset: 0, seekable: true, made: true };   // offset: see swap
     const r = await fetch(prog.url, { method: "HEAD" });
     const key = r.headers.get("X-Mix-Key");
     if (r.status === 200) return { url: `${prog.url}&k=${key}`, offset: 0, seekable: true, made: true };
@@ -78,8 +84,11 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
     if (got.seekable) {
       await once(n.el, ["loadedmetadata"]);
       if (my !== gen) return;
+      // a file as long as its clip (not the piece) starts at the clip's place on the piece's clock
+      const c = prog.clip;
+      if (c && Math.abs(n.el.duration - (c.start + c.len)) >= 1) n.offset = c.start;
       const sought = once(n.el, ["seeked"]);
-      n.el.currentTime = target;
+      n.el.currentTime = Math.max(0, target - n.offset);
       await sought;
     }
     if (n.el.readyState < 3) await once(n.el, ["canplay"]);
@@ -89,11 +98,11 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
       const wait = jump ? 0 : target - now();
       if (wait > 0.02) await new Promise((r) => setTimeout(r, wait * 1000));
       if (my !== gen) return;
-      if (wait < -0.08 && got.seekable) n.el.currentTime = now() + 0.03;   // late: catch up rather than repeat
+      if (wait < -0.08 && got.seekable) n.el.currentTime = Math.max(0, now() + 0.03 - n.offset);   // late: catch up rather than repeat
       try { await n.el.play(); } catch (e) { onError(e.message); return; }
       const old = live;
       live = n; next = old;
-      await Promise.all([ramp(n.el, 1), ramp(old.el, 0)]);
+      await Promise.all([ramp(n.el, 1, FADE_IN), ramp(old.el, 0, FADE_OUT)]);
       old.el.pause();
     } else {
       const old = live;
@@ -103,6 +112,23 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
     next.key = null;
     if (my === gen) jumpTo = null;
     if (!got.made) watch(prog, my);
+  }
+
+  /* A seek in place: the element goes silent, jumps, comes back; the last place asked wins. */
+  async function land() {
+    const slot = live, el = slot.el;
+    landing = true;
+    if (playing) await ramp(el, 0, FADE_OUT);
+    while (wantSeek != null) {
+      const s = wantSeek;
+      wantSeek = null;
+      const sought = once(el, ["seeked"]).catch(() => {});
+      el.currentTime = Math.max(0, s - slot.offset);
+      await sought;
+    }
+    landing = false;
+    jumpTo = null;
+    if (playing && slot === live) ramp(el, 1, FADE_IN);
   }
 
   /* A streamed sum moves onto its made file once the server has it. */
@@ -145,8 +171,9 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
     async play() {
       if (!live.key) return false;
       playing = true;
-      live.el.volume = 1;
+      live.el.volume = 0;
       try { await live.el.play(); } catch (e) { playing = false; onError(e.message); return false; }
+      if (playing) ramp(live.el, 1, FADE_IN);
       tick();
       return true;
     },
@@ -155,29 +182,21 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
       if (live.key) pos = now();
       playing = false;
       cancelAnimationFrame(raf);
-      live.el.pause();
-      next.el.pause();
+      const el = live.el;
+      ramp(el, 0, FADE_OUT).then(() => { if (!playing || live.el !== el) el.pause(); });
       return pos;
     },
 
-    /* A seek in place: the live file jumps under a short dip, one seek in flight, the last one asked wins. A stream
-       can't seek: `final` seeks reload it from there; a drag's moves only move the head. */
-    seek(s, { final = true } = {}) {
-      if (!live.key) { pos = s; return; }
-      if (!live.seekable) {
-        if (final) this.load(live.prog, s, { force: true, jump: true });
-        return;
-      }
-      if (seeking) { wantSeek = s; return; }
-      seeking = true;
-      const el = live.el, was = playing;
-      if (was) el.volume = 0;
-      el.addEventListener("seeked", () => {
-        seeking = false;
-        if (wantSeek != null) { const w = wantSeek; wantSeek = null; this.seek(w, { final }); return; }
-        if (was && playing) ramp(el, 1, FADE / 2);
-      }, { once: true });
-      el.currentTime = Math.max(0, s - live.offset);
+    /* A drag has begun: silent until it lands (seek), so moving the head makes no sound at all. */
+    hush() { if (playing && live.key) ramp(live.el, 0, FADE_OUT); },
+
+    /* A stream can't jump: it is asked again from there, and takes over when it can play. */
+    seek(s) {
+      if (!live.key) { pos = s; return Promise.resolve(); }
+      jumpTo = s;
+      if (!live.seekable) return this.load(live.prog, s, { force: true, jump: true });
+      wantSeek = s;
+      return landing ? Promise.resolve() : land();
     },
 
     stop() {

@@ -98,7 +98,7 @@ class CutMix(unittest.TestCase):
         self.assertTrue(v1["items"][0]["parts"][0].get("archived"))              # v1's comp1 lane: out
         self.assertFalse(v1["items"][1]["parts"][0].get("archived"))             # v1's trans `a`: in
         self.assertFalse(v2["parts"][0].get("archived"))                          # v2's `a`: in
-        self.assertTrue(v1["media"]["audio"].startswith(f"/api/cards/{cid}/mix?version=1&cut=a&k="))
+        self.assertTrue(v1["media"]["audio"].startswith(f"/api/cards/{cid}/mix?version=1&lanes=b&k="))
         self.assertEqual(v2["media"]["audio"], f"/media/{cid}/v2__mix.mp3")
         self.assertLess(mean_db(self.C.mix_file(cid, 1)), -60)                   # the cut mix: only b
 
@@ -111,7 +111,7 @@ class CutMix(unittest.TestCase):
         self.cut("a")
         c = self.C.read_card(self.cid)
         m = c["versions"][0]["media"]
-        self.assertTrue(m["audio"].startswith(f"/api/cards/{self.cid}/mix?version=1&cut=a&k="), m["audio"])
+        self.assertTrue(m["audio"].startswith(f"/api/cards/{self.cid}/mix?version=1&lanes=b&k="), m["audio"])
         self.assertEqual(m["audio_full"], f"/media/{self.cid}/v1__mix.mp3")
         self.assertEqual(c["media"]["audio"], m["audio"], "the card's sound follows its newest version")
         out = self.C.mix_file(self.cid, 1)
@@ -135,7 +135,7 @@ class CutMix(unittest.TestCase):
         self.C._cache.clear()
         u2 = self.C.read_card(self.cid)["versions"][0]["media"]["audio"]
         self.assertNotEqual(u1, u2)
-        self.assertEqual(u1.split("&k=")[0], u2.split("&k=")[0], "same cut, new content key")
+        self.assertEqual(u1.split("&k=")[0], u2.split("&k=")[0], "the same lanes, a new content key")
 
     def test_a_missing_kept_band_is_unavailable_never_short(self):
         self.cut("a")
@@ -174,7 +174,7 @@ class CutMix(unittest.TestCase):
         app.register_blueprint(self.C.bp)
         self.cut("b")
         cl = app.test_client()
-        r = cl.get(f"/api/cards/{self.cid}/mix?version=1&cut=b")
+        r = cl.get(f"/api/cards/{self.cid}/mix?version=1")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.mimetype, "audio/mpeg")
         self.assertGreater(len(r.data), 1000)

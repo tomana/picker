@@ -69,7 +69,7 @@ async function check(sp, log) {
         return new Response(JSON.stringify(b), { headers: { "Content-Type": "application/json" } });
       };
     });
-    await page.click(".sheet.job .qjacts .qmenu");
+    await page.$eval(".sheet.job .qjacts .qmenu", (b) => b.click());      // in one step: the sheet redraws on its own
     await page.waitForSelector(".whopop .whotab", { timeout: 5000 });
     const tabs = await page.$$eval(".whopop .whotab", (t) => t.map((x) => [x.textContent, x.classList.contains("on")]));
     assert(tabs.some(([t, on]) => t === "codex" && on) && tabs.some(([t]) => t === "claude"),
@@ -78,7 +78,7 @@ async function check(sp, log) {
     await sleep(150);
     const agent = "claude";
     const picked = await page.$eval(".whopop .whom", (m) => m.title);
-    await page.click(".whopop .whom");
+    await page.$eval(".whopop .whom", (b) => b.click());
     await sleep(300);
     const retried = sent.filter((x) => x.method === "POST" && /\/retry$/.test(x.path));
     assert(retried.length === 1 && retried[0].path.includes(W) && retried[0].body.includes(`"agent":"${agent}"`)

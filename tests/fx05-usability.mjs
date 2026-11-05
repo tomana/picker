@@ -31,8 +31,9 @@ export async function run(log) {
     await sleep(700);
     sent.length = 0;
     await page.evaluate(() => {
-      const row = [...document.querySelectorAll(".sheet.big .vrowc")].find((r) => /drone/.test(r.textContent));
-      row.querySelector('[title="add this band to the timeline"]').click();
+      const s = document.querySelector('.sheet.big .np-row[data-lane="drone"] .np-strip');
+      s.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      document.querySelector(".np-mi[data-act='clip']").click();
     });
     await sleep(1500);
     const clip = sent.filter((x) => x.m === "PUT" && /\/clips/.test(x.path)).map((x) => JSON.parse(x.body)).at(-1);

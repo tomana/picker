@@ -64,3 +64,18 @@ test("a fresh card moves a lane out without moving the position", () => {
   assert.deepEqual(Q.lanes.map((l) => [l.id, l.out, l.pending]), [["a", true, false], ["b", false, false], ["c", false, false]]);
   assert.equal(program(Q).url, "/api/cards/c1/mix?version=2&lanes=b%2Cc");
 });
+
+test("a mute waits by id through a version without that lane", () => {
+  let P = reduce(at(2), { type: "mute", lane: "b", on: true });
+  P = reduce(P, { type: "source", src: sourceOf(CARD, 2, "trans") });
+  P = reduce(P, { type: "source", src: sourceOf(CARD, 2) });
+  assert.equal(P.lanes.find((l) => l.id === "b").muted, true);
+  assert.deepEqual(initial(sourceOf(CARD, 1), { muted: ["a"], position: 7 }).lanes.map((l) => l.muted), [true, false]);
+  assert.equal(initial(sourceOf(CARD, 1), { muted: ["a"], position: 7 }).position, 7);
+});
+
+test("a timed lane's solo says its clip, for the clock", () => {
+  const C = { id: "c", versions: [{ n: 1, duration: 60, parts: [lane("a", { time: { start: 10, len: 20 } })] }] };
+  const P = reduce(initial(sourceOf(C, 1)), { type: "solo", lane: "a" });
+  assert.deepEqual(program(P).clip, { start: 10, len: 20 });
+});

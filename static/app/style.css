@@ -1320,26 +1320,15 @@ span.qthumb { display:inline-block; background:var(--dip) }
                        color:#ffffff; opacity:1;
                        text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
                                    0 0 3px #000 }
-.sheet .vrowc .sname.tag { pointer-events:auto; cursor:pointer }
-.sheet .vrowc .sname.tag:hover { text-decoration:underline }
 .sheet .vrowc .stime { font-size:10px; line-height:13px; top:2px; color:#ffffff; opacity:.85;
                        text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 }
 
 .sheet .vwrap .vblock { grid-template-rows:repeat(var(--vn, 1), minmax(46px, auto)) }
 .vrowc { grid-template-columns:44px 1fr 72px 44px; gap:5px; align-items:stretch }
-.vrowc .vc.big { width:44px; min-height:40px; height:auto; color:#cfcfcf;
-                 border:0; background:none; border-radius:6px }
-.vrowc .vc.big:active { background:#1f1f1f }
-.vrowc .vc.big.on { color:#141414; background:var(--playing) }
 
-.vcutnote { display:block; width:100%; min-height:36px; margin-top:4px; padding:0 10px; text-align:left;
-            font-size:12px; color:#8a8a8a; background:none; border:1px dashed #333333; border-radius:6px }
-.vcutnote:active { background:#1a1a1a }
-.vrowc .vc.big.mute.on { color:#d9a24a; background:none }
 .vrowc > .vcr { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
                 grid-template-rows:repeat(2, minmax(0, 1fr)); gap:2px; align-items:stretch }
 .vrowc > .vcr .vc { width:100%; height:auto; min-width:0; min-height:19px }
-.vrowc.muted .lane { opacity:.35 }
 .vrowc > .vcr .vc:not(.on) { color:#9a9a9a }
 .vrowc > .vcr .vc:disabled { opacity:.35 }
 
@@ -1662,23 +1651,25 @@ span.qthumb { display:inline-block; background:var(--dip) }
 .sc-pipe { color:#8a8a8a }
 
 /* The new lane player (static/app/player/): a ruler, a row per lane, one playhead, a transport bar. */
-.np { display:flex; flex-direction:column; height:100%; min-height:0; user-select:none; -webkit-user-select:none }
+.np { display:flex; flex-direction:column; user-select:none; -webkit-user-select:none }
 .np-lanes { position:relative; flex:1 1 auto; min-height:0; display:flex; flex-direction:column }
-.np-rows { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain }
-.np-ruler, .np-row { display:grid; grid-template-columns:44px minmax(0, 1fr) 44px 44px; column-gap:4px }
-.np-ruler { position:sticky; top:0; z-index:2; height:32px; background:var(--ground); touch-action:none;
+.np-rows { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
+           padding-bottom:56px; box-sizing:border-box }           /* the last lane clear of ▶ */
+.np-ruler, .np-row { display:grid; grid-template-columns:44px minmax(0, 1fr) repeat(2, 44px); column-gap:4px }
+.np-ruler { position:sticky; top:0; z-index:2; height:18px; background:var(--ground); touch-action:none;
             cursor:pointer; border-bottom:1px solid var(--edge) }
 .np-rcell { grid-column:2; position:relative; min-width:0 }
-.np-rcell canvas, .np-strip canvas, .np-over canvas { position:absolute; inset:0; width:100%; height:100%; display:block }
-.np-t { grid-column:3 / span 2; align-self:center; justify-self:end; padding-right:6px; font-size:11px;
-        color:var(--fg); font-variant-numeric:tabular-nums; pointer-events:none }
-.np-row { height:48px; padding:2px 0; box-sizing:border-box; align-items:stretch }
+.np-rcell canvas, .np-strip canvas { position:absolute; inset:0; width:100%; height:100%; display:block }
+.np-tt { grid-column:3 / span 2; align-self:center; justify-self:end; padding-right:4px; font-size:10px; line-height:18px;
+         color:var(--mut); font-variant-numeric:tabular-nums; white-space:nowrap; pointer-events:none }
+.np-t { color:var(--fg) }
+.np-row { height:48px; padding:2px 0; box-sizing:border-box; align-items:stretch; touch-action:pan-y }
 .np-b { width:44px; min-height:44px; padding:0; border:0; background:none; color:#cfcfcf; display:flex;
         align-items:center; justify-content:center; cursor:pointer }
 .np-b:active { background:#1f1f1f }
 .np-row.solo .np-solo { background:var(--playing); color:#141414 }
 .np-out.on, .np-mute.on { color:#d9a24a }
-.np-strip { position:relative; min-width:0; background:#151515; overflow:hidden; touch-action:pan-y; cursor:pointer }
+.np-strip { position:relative; min-width:0; background:#151515; overflow:hidden; cursor:pointer }
 .np-name { position:absolute; left:4px; top:2px; max-width:calc(100% - 8px); overflow:hidden; text-overflow:ellipsis;
            white-space:nowrap; font-size:11px; line-height:13px; color:#ffffff; pointer-events:none;
            text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 }
@@ -1689,15 +1680,8 @@ span.qthumb { display:inline-block; background:var(--dip) }
 .np-head { position:absolute; top:0; bottom:0; left:0; width:2px; margin-left:-1px; z-index:3; pointer-events:none;
            background:rgba(255,255,255,.85); will-change:transform }
 .np.playing .np-head { background:var(--playing) }
-.np-bar { flex:none; display:flex; column-gap:8px; align-items:center;
-          height:56px; padding-right:4px; border-top:1px solid var(--edge); background:var(--ground) }
-.np-bar .np-over { flex:1 1 auto; min-width:0 }
-.np-bar .vfull { flex:none; width:44px; height:44px; padding:0; border:0; background:none; color:#cfcfcf;
-                 display:flex; align-items:center; justify-content:center; cursor:pointer }
-.np-play { flex:none; width:56px; height:56px; padding:0; border:0; background:none; color:var(--fg); display:flex;
-           align-items:center; justify-content:center; cursor:pointer }
-.np-play.on { background:var(--playing); color:#141414 }
-.np-over { position:relative; height:40px; background:#151515; overflow:hidden; touch-action:none; cursor:pointer }
-.np-fill { position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,255,255,.14); pointer-events:none }
-.np-time { font-size:12px; color:var(--mut); font-variant-numeric:tabular-nums; white-space:nowrap }
-.npswitch.on { color:var(--playing) }
+.np-menu { position:absolute; z-index:8; display:grid; gap:2px; max-width:100%; background:var(--surface);
+           border:1px solid var(--edge); box-shadow:0 8px 24px rgba(0,0,0,.6) }
+.np-mi { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 10px; text-align:left; border:0;
+         background:none; color:var(--fg); cursor:pointer }
+.np-mi:active { background:#1f1f1f }

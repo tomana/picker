@@ -9,51 +9,31 @@ export async function run(log) {
       w.querySelector("article.card .media, article.card .vblock, article.card").click();
     });
     await sleep(1200);
+    const headAt = () => page.evaluate(() => { const lr = document.querySelector(".sheet.big .np-strip").getBoundingClientRect();
+      const h = document.querySelector(".sheet.big .np-head").getBoundingClientRect();
+      return { px: Math.round(h.left - lr.left), f: (h.left + h.width / 2 - lr.left) / lr.width, x: h.left, y: lr.top + lr.height / 2, laneL: lr.left, laneW: lr.width }; });
     const samples = await page.evaluate(async () => {
-      const blk = document.querySelector(".sheet.big .vblock");
-      window.__ins = [];
-      new MutationObserver((ms) => {
-        for (const m of ms) for (const n of m.addedNodes) {
-          const lines = n.nodeType === 1 ? (n.matches(".vline") ? [n] : [...n.querySelectorAll(".vline")]) : [];
-          for (const l of lines) {
-            const lane = l.parentElement && l.parentElement.querySelector(".lane");
-            if (!lane) continue;
-            window.__ins.push({ visible: getComputedStyle(l).visibility !== "hidden",
-                                rel: Math.round(l.getBoundingClientRect().left - lane.getBoundingClientRect().left) });
-          }
-        }
-      }).observe(document.querySelector(".sheet.big"), { childList: true, subtree: true });
-      document.querySelector(".sheet.big .vplay").click();
+      document.querySelector(".sheet.big .np-play").click();
       const out = [];
       const t0 = performance.now();
       let muted = false;
       while (performance.now() - t0 < 1500) {
         if (!muted && performance.now() - t0 > 700) {
           muted = true;
-          const m = document.querySelectorAll(".sheet.big .vrowc [title='mute this band']")[1];
+          const m = document.querySelectorAll(".sheet.big .np-mute")[1];
           if (m) m.click();
         }
         await new Promise((r) => requestAnimationFrame(r));
-        const b = document.querySelector(".sheet.big .vblock") || blk;
-        const l = b.querySelector(".vline"), lane = b.querySelector(".lane");
-        if (!l || !lane || getComputedStyle(l).visibility === "hidden") continue;
-        out.push(Math.round(l.getBoundingClientRect().left - lane.getBoundingClientRect().left));
+        const lr = document.querySelector(".sheet.big .np-strip").getBoundingClientRect();
+        out.push(Math.round(document.querySelector(".sheet.big .np-head").getBoundingClientRect().left - lr.left));
       }
       return out;
     });
-    assert(samples.length > 10, `too few frames with a line: ${samples.length}`);
-    const ins = await page.evaluate(() => window.__ins);
-    const flash = ins.filter((x) => x.visible && x.rel < -2);
-    assert(!flash.length, `a line was drawn left of the lanes on insertion (the jump): ${JSON.stringify(ins)}`);
-    log(`${ins.length} lines inserted while playing (a mute included): none drawn left of the lanes`);
+    assert(samples.length > 10, `too few frames: ${samples.length}`);
     const left = Math.min(...samples);
     assert(left >= -2, `the line was ${-left}px left of the lanes (a jump): ${samples.slice(0, 12).join(",")}`);
-    log(`open card ▶: ${samples.length} frames, the line never left of the lanes (min ${left}px)`);
-    const g = await page.evaluate(() => {
-      const l = document.querySelector(".sheet.big .vline"), lane = document.querySelector(".sheet.big .lane");
-      const r = l.getBoundingClientRect(), lr = lane.getBoundingClientRect();
-      return { x: r.left + 1, y: lr.top + lr.height / 2, laneL: lr.left, laneW: lr.width };
-    });
+    log(`open card ▶: ${samples.length} frames (a mute included), the line never left of the lanes (min ${left}px)`);
+    const g = await headAt();
     const to = g.laneL + g.laneW * 0.6;
     await page.mouse.move(g.x + 6, g.y);
     await page.mouse.down();
@@ -61,13 +41,13 @@ export async function run(log) {
     await page.mouse.move(to, g.y + 20, { steps: 8 });
     await page.mouse.up();
     await sleep(120);
-    const after = await page.evaluate(() => {
-      const l = document.querySelector(".sheet.big .vline"), lane = document.querySelector(".sheet.big .lane");
-      const lr = lane.getBoundingClientRect();
-      return l ? (l.getBoundingClientRect().left - lr.left) / lr.width : null;
-    });
-    assert(after != null && Math.abs(after - 0.6) < 0.05, `grabbed and dragged to 60%: the line is at ${after}`);
-    log(`grabbed on its handle, dragged down then across: the line at ${(after * 100).toFixed(1)}%`);
+    const after = (await headAt()).f;
+    assert(Math.abs(after - 0.6) < 0.05, `grabbed and dragged to 60%: the line is at ${after}`);
+    log(`grabbed on a lane, dragged down then across: the line at ${(after * 100).toFixed(1)}%`);
+    const corner = await page.evaluate(() => { const b = document.querySelector(".sheet.big .vplay").getBoundingClientRect(),
+      m = document.querySelector(".sheet.big .cmedia").getBoundingClientRect();
+      return { w: b.width, right: m.right - b.right, bottom: m.bottom - b.bottom, full: !!document.querySelector(".sheet.big .np .vfull") }; });
+    assert(corner.w >= 44 && corner.right < 12 && corner.bottom < 12 && corner.full, `▶ and ⛶ in the lanes' corner: ${JSON.stringify(corner)}`);
     const tab = await page.evaluate(() => {
       const t = document.querySelector(".auxplay"), sh = document.querySelector(".sheet.big");
       const v = [...sh.querySelectorAll(":scope > .cfoot > .vcell")].map((x) => x.getBoundingClientRect());
@@ -93,7 +73,7 @@ export async function run(log) {
     await sleep(700);
     const pin = await page.evaluate(() => {
       const t = document.querySelector(".auxplay"), tr = t.getBoundingClientRect(), l = t.querySelector(".auxline");
-      const ml = document.querySelector(".sheet.big .vline"), lr = document.querySelector(".sheet.big .lane").getBoundingClientRect();
+      const ml = document.querySelector(".sheet.big .np-head"), lr = document.querySelector(".sheet.big .np-strip").getBoundingClientRect();
       return { tab: (l.getBoundingClientRect().left + 1 - tr.left) / tr.width, card: ml ? (ml.getBoundingClientRect().left - lr.left) / lr.width : null,
                playing: t.classList.contains("on") };
     });

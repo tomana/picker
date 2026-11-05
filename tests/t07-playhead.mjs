@@ -71,23 +71,16 @@ export async function run(log) {
     await sleep(1000);
     assert(await page.evaluate(() => !!document.querySelector(".sheet.big:not([hidden])")),
       "a tap no longer opens the card");
-    const sb = await blockBox(page, ".sheet .vblock .lane");
+    const sb = await blockBox(page, ".sheet .np-strip");
     await page.mouse.click(sb.x + sb.w * 0.25, sb.y + sb.h / 2);
     await sleep(1200);
-    const head = await page.evaluate(() => {
-      const blk = document.querySelector(".sheet .vblock");
-      const lr = blk.querySelector(".lane").getBoundingClientRect();
-      const line = blk.querySelector(".vline");
-      return line ? ((line.getBoundingClientRect().left - lr.left) / lr.width) * 100 : null;
+    const at = async () => page.evaluate(() => {
+      const lr = document.querySelector(".sheet .np-strip").getBoundingClientRect();
+      return ((document.querySelector(".sheet .np-head").getBoundingClientRect().left - lr.left) / lr.width) * 100;
     });
+    const head = await at();
     log(`open-card tap at 25% along the lane: playhead at ${head.toFixed(1)}%`);
     assert(Math.abs(head - 25) < 8, `tap did not seek (${head})`);
-    const at = async () => page.evaluate(() => {
-      const blk = document.querySelector(".sheet .vblock");
-      const lr = blk.querySelector(".lane").getBoundingClientRect();
-      const line = blk.querySelector(".vline");
-      return line ? ((line.getBoundingClientRect().left - lr.left) / lr.width) * 100 : null;
-    });
     const a1 = await at();
     await sleep(1800);
     const a2 = await at();

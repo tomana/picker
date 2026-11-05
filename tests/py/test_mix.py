@@ -161,7 +161,7 @@ class Mix(unittest.TestCase):
                                   "version": 1, "item": "trans"}) + "\n")
         v = self.C.read_card(self.cid)["versions"][0]
         trans = v["items"][1]["media"]
-        self.assertTrue(trans["audio"].startswith(f"/api/cards/{self.cid}/mix?version=1&item=trans&cut=a&k="))
+        self.assertTrue(trans["audio"].startswith(f"/api/cards/{self.cid}/mix?version=1&item=trans&lanes=b&k="))
         self.assertEqual(trans["audio_full"], f"/media/{self.cid}/v1__t_mix.mp3")
         self.assertEqual(v["media"]["audio"], f"/media/{self.cid}/v1__mix.mp3", "the face item is untouched")
         r = self.cl.get(trans["audio"])

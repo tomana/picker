@@ -14,10 +14,10 @@ export async function run(log) {
       await sleep(1500);                                                   // ~1.5 s in on the grid
       await page.evaluate((id) => { const a = document.querySelector(`.grid article.card[data-cid="${id}"]`);
         (a.querySelector(".media, .vblock") || a).click(); }, id);
-      await page.waitForSelector(".sheet.big:not([hidden]) .vblock .vline[data-t]", { timeout: 8000 });
+      await page.waitForSelector(".sheet.big:not([hidden]) .np-row", { timeout: 8000 });
       const at = () => page.evaluate(() => {
-        const s = document.querySelector(".sheet.big"), l = s.querySelector(".vblock .vline");
-        return { on: !!s.querySelector(".vplay.on"), t: l && l.dataset.t };
+        const s = document.querySelector(".sheet.big");
+        return { on: !!s.querySelector(".vplay.on"), t: s.querySelector(".np-t").textContent };
       });
       await sleep(300);
       const a = await at();

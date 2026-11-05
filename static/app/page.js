@@ -3,7 +3,7 @@
 import { el, usageBar, iconBtn, autoStrip, autoLine, poolHead, voteCells, listWhen, cardMedia, thumb,
          scrollIndicator, glyph, kindIcon, panelHead, RECORDING_YELLOW, playGlyphs, madeChips,
          infoBubble, closeBubble, dragScrollX } from "./dom.js";
-import { voiceBlock, waveSvg, stampLine, clock, firstSound } from "./parts/voice.js";
+import { voiceBlock, waveSvg, stampLine, clock } from "./parts/voice.js";
 import { trimEditor } from "./parts/trim.js";
 import { nodeBlock, paramPanel } from "./parts/node.js";
 import { abBlock, abFacts, abLength } from "./parts/ab.js";
@@ -15,7 +15,7 @@ import { walk, stop as stopWalk, walking, present, CARD_STEPS } from "./parts/wa
 import { mountAudit } from "./parts/audit.js";
 import { sessionPct } from "./data.js";
 import { codeView } from "./parts/code.js";
-import { createPlayer, pausePlayer, playable } from "./player/view.js";
+import { createPlayer, pausePlayer, lanesOf } from "./player/view.js";
 
 const PART_BLOCKS = { voice: voiceBlock, node: nodeBlock };
 
@@ -152,7 +152,9 @@ export function build() {
     const img = animOf(card);
     if (!img) {
       const url = turnPlays() ? cardAudio(card) : null;
-      const yours = [...panels.values()].some((p) => p.busy()) || ((listen.el || listen.loading) && !listen.byTurn);
+      // the open card's player is the page's sound while it is open; a repaint behind it must not start a tile
+      const yours = [...panels.values()].some((p) => p.busy()) || (listen.el && !listen.byTurn)
+        || (shells.big && !shells.big.sh.hidden);
       if (url && !yours) {
         const block = card.querySelector(".vblock");
         const pb = card.querySelector(".vplay");
@@ -1183,25 +1185,17 @@ export function build() {
   }
 
   const pausedAt = new Map();
-  const listen = { muted: new Set(), mutedFor: null, solo: null, el: null, card: null, ver: null, loading: null,
-                   byTurn: false };
-
-  const showCut = new Set();
-  /* Bands taken out on this page stay in view, struck through, so the same trash puts them back. */
-  const cutHere = new Set();
+  const listen = { el: null, card: null, ver: null, byTurn: false };
 
   const same = (a, b) => !!a && !!b && (a === b || (a.id != null && a.id === b.id));
   const owns = (c, ver = null) => !!listen.el && same(listen.card, c)
     && (ver == null || listen.ver == null || listen.ver === ver);
 
   function versionSwitched(c) {
-
-    const ld = listen.loading && same(listen.loading.card, c) ? listen.loading : null;
-    if (!ld && (!listen.el || !same(listen.card, c))) return null;
-    const was = { solo: (ld ? ld.solo : listen.solo) || null };
+    if (!listen.el || !same(listen.card, c)) return null;
     c.at = null;
     stopAudio();
-    return was;
+    return {};
   }
 
   const player = {
@@ -1214,137 +1208,6 @@ export function build() {
       return this.el;
     },
   };
-
-  const B = {
-    ctx: null, bufs: new Map(), tracks: [], nodes: [], only: null, ls: [],
-    _paused: true, _offset: 0, _t0: 0, _raf: 0, duration: 0, onended: null,
-    actx() {
-      if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      return this.ctx;
-    },
-
-    sizes: new Map(), inUse: new Set(), BUDGET: 120e6,
-    buf(url) {
-      const hit = this.bufs.get(url);
-      if (hit) { this.bufs.delete(url); this.bufs.set(url, hit); return hit; }
-
-      const pr = fetch(url)
-        .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-        .then((b) => this.actx().decodeAudioData(b))
-        .then((ab) => { this.sizes.set(url, ab.length * ab.numberOfChannels * 4); this._trim(); return ab; })
-        .catch(() => { this.bufs.delete(url); this.sizes.delete(url); return null; });
-      this.bufs.set(url, pr);
-      return pr;
-    },
-    _trim() {
-      let total = 0;
-      for (const v of this.sizes.values()) total += v;
-      for (const url of [...this.bufs.keys()]) {
-        if (total <= this.BUDGET) break;
-        if (this.inUse.has(url) || !this.sizes.has(url)) continue;
-        total -= this.sizes.get(url);
-        this.sizes.delete(url); this.bufs.delete(url);
-      }
-    },
-    get paused() { return this._paused; },
-    get currentTime() {
-      return this._paused ? this._offset
-        : Math.min(this.duration, this.actx().currentTime - this._t0 + this._offset);
-    },
-    set currentTime(t) {
-      const was = !this._paused;
-      if (was) this._stopNodes();
-      this._offset = Math.max(0, Math.min(this.duration, t));
-      if (was) this._startNodes();
-      setTimeout(() => this._fire("seeked"), 0);
-    },
-    addEventListener(type, fn) { this.ls.push([type, fn]); },
-    _fire(type) {
-      const now = this.ls.filter((x) => x[0] === type);
-      this.ls = this.ls.filter((x) => x[0] !== type);
-      now.forEach((x) => x[1]());
-    },
-    load(tracks, only) {
-      this._stopNodes();
-      this.tracks = tracks; this.only = only;
-      this.duration = Math.max(...tracks.map((t) => t.buf.duration));
-      this._offset = 0; this._paused = true;
-    },
-    gainOf(id) { return this.only ? 1 : (listen.muted.has(id) ? 0 : 1); },
-    setGain(id, v) {
-      const n = this.nodes.find((x) => x.id === id);
-      if (n) n.g.gain.setTargetAtTime(v, this.actx().currentTime, 0.012);
-    },
-    _startNodes() {
-      const ctx = this.actx();
-      const t0 = ctx.currentTime + 0.03;
-      this.nodes = this.tracks.map((t) => {
-        const src = ctx.createBufferSource(); src.buffer = t.buf;
-        const g = ctx.createGain(); g.gain.value = this.gainOf(t.id);
-        src.connect(g); g.connect(ctx.destination);
-        src.start(t0, Math.min(this._offset, Math.max(0, t.buf.duration - 0.001)));
-        return { id: t.id, src, g };
-      });
-      this._t0 = t0; this._paused = false;
-      const loop = () => {
-        if (this._paused) return;
-        const now = this.currentTime;
-        if (listen.el === this && listen.card) {
-          listen.card.at = this.duration ? now / this.duration : 0;
-          if (listen.tick) listen.tick(listen.card.at);
-        }
-        if (now >= this.duration - 0.01) {
-          this._stopNodes(); this._paused = true; this._offset = 0;
-          if (this.onended) this.onended();
-          return;
-        }
-        this._raf = requestAnimationFrame(loop);
-      };
-      this._raf = requestAnimationFrame(loop);
-    },
-    _stopNodes() {
-      cancelAnimationFrame(this._raf);
-      for (const n of this.nodes) {
-        try { n.src.stop(); } catch (_) {}
-        try { n.src.disconnect(); n.g.disconnect(); } catch (_) {}
-      }
-      this.nodes = [];
-    },
-    pause() { if (this._paused) return; this._offset = this.currentTime; this._stopNodes(); this._paused = true; },
-    play() {
-      if (this._paused) { this.actx().resume().catch(() => {}); this._startNodes(); }
-      return Promise.resolve();
-    },
-    stop() { this._stopNodes(); this._paused = true; this.onended = null; this.ls = []; },
-  };
-  /* Lanes play in step from decoded buffers, ~0.4 MB a second each: every lane fetched and decoded before the first
-     sound, slow over a phone's link (a long piece's are over 1 GB). So the open card streams its mix (a solo lane its
-     own file) as a tile does; the lanes are decoded only when a mute or a taken-out lane needs them. */
-
-  let bandGen = 0;
-  async function playBands(c, parts, { tick = null, done = null, from = 0, only = null, ver = null } = {}) {
-    stopAudio();
-    const gen = bandGen;
-
-    listen.loading = { card: c, solo: only };
-    try { await B.actx().resume(); } catch (_) {}
-    const list = parts.filter((p) => p.audio && (!only || p.id === only));
-    const bufs = await Promise.all(list.map((p) => B.buf(p.audio)));
-    if (gen !== bandGen) return false;
-    listen.loading = null;
-    B.inUse = new Set(list.map((p) => p.audio));
-    const tracks = list.map((p, i) => ({ id: p.id, buf: bufs[i] })).filter((t) => t.buf);
-
-    const lost = list.filter((_, i) => !bufs[i]).map((p) => p.label || p.id);
-    if (lost.length) toast(`couldn't load ${lost.join(", ")} — playing without ${lost.length > 1 ? "them" : "it"}; ▶ again to retry`);
-    if (!tracks.length) { if (done) done(); return false; }
-    B.load(tracks, only);
-    B.onended = () => { c.at = null; stopAudio({ playlist: false }); if (done) done(); };
-    listen.el = B; listen.card = c; listen.tick = tick || null; listen.solo = only; listen.ver = ver;
-    B._offset = Math.max(0, Math.min(B.duration, from));
-    B.play();
-    return true;
-  }
 
   const rank = { el: null, id: null, raf: 0 };
 
@@ -1432,9 +1295,6 @@ export function build() {
     rankStop();
     listen.byTurn = false;
     if (pl) for (const p of panels.values()) p.pause();
-    bandGen++;
-    listen.loading = null;
-    B.stop();
     const a = player.el;
     if (a) {
 
@@ -1442,7 +1302,6 @@ export function build() {
       try { a.pause(); } catch (_) {}
     }
     listen.el = null;
-    listen.solo = null;
     listen.tick = null;
     listen.ver = null;
     listen.seg = null;
@@ -1453,7 +1312,7 @@ export function build() {
     for (const e of document.querySelectorAll(".origpb.on")) e.classList.remove("on");
   }
 
-  function scrubbable(block, card, url, pb, repaint, tapSeeks, starter = null, ver = null) {
+  function scrubbable(block, card, url, pb, repaint, tapSeeks, ver = null) {
     let at = null, scrubbing = false, sx = 0, sy = 0, swallow = false;
     let wasPlaying = false;
 
@@ -1489,7 +1348,6 @@ export function build() {
         return;
       }
 
-      if (starter) { starter(f); if (pb) pb.classList.add("on"); return; }
       play(card, url, { tick: lineIn(block), ver,
                         done: () => { if (pb) pb.classList.remove("on");
                                       if (repaint) repaint(); } });
@@ -1641,21 +1499,6 @@ export function build() {
     a.play().catch(end);
   }
 
-  function cutNote(c, version, repaint) {
-    const n = partsOf(c, version).filter((p) => p.kind === "voice" && p.archived).length;
-    if (!n) return null;
-    const shown = showCut.has(c.id);
-    const b = el("button.vcutnote", { type: "button",
-      title: shown ? "hide the bands taken out" : "show the bands taken out — ✕ on one puts it back",
-      text: `${n} band${n > 1 ? "s" : ""} taken out · ${shown ? "hide" : "show"}` });
-    b.onclick = (e) => {
-      e.stopPropagation();
-      shown ? showCut.delete(c.id) : showCut.add(c.id);
-      if (repaint) repaint();
-    };
-    return b;
-  }
-
   function fullButton(c) {
     const b = el("button.vfull", { type: "button" });
     const paint = (on) => {
@@ -1704,73 +1547,19 @@ export function build() {
     }
 
     const abOn = !!cap(c.type, "ab") && !!((ver.media || {}).ab || (ver.media || {}).reference);
-    const bandParts = controls && !abOn ? partsOf(c, version).filter((p) => p.kind === "voice" && p.audio && !p.archived) : [];
-
-    const allCut = controls && !abOn && !bandParts.length
-      && partsOf(c, version).some((p) => p.kind === "voice" && p.audio);
-    // the mix plays while it leaves out exactly the lanes taken out (the server's cut mix names them) and none is muted
-    const cutOf = (u) => { try { return new URL(u, location.href).searchParams.get("cut") || ""; } catch (_) { return null; } };
-    const mixWhole = () => !!(ver.media || {}).audio
-      && cutOf(ver.media.audio) === partsOf(c, version).filter((p) => p.kind === "voice" && p.archived)
-        .map((p) => p.id).sort().join(",")
-      && !bandParts.some((p) => listen.muted.has(p.id));
-    const mixStreaming = () => owns(c, ver.id) && !listen.solo && listen.el === player.el;
-    // a mute while the mix streams: the mix plays on while the lanes load, then they take over from where it is
-    const toLanes = () => {
-      B.actx().resume().catch(() => {});                       // in the tap: a phone may not let it start later
-      B.inUse = new Set(bandParts.map((p) => p.audio));        // not trimmed while their siblings decode
-      if (!bandParts.every((p) => B.sizes.has(p.audio))) toast("loading the lanes — the mute is heard once they're in");
-      Promise.all(bandParts.map((p) => B.buf(p.audio))).then(() => {
-        if (!mixStreaming()) return;                           // stopped, or something else plays, meanwhile
-        playBands(c, bandParts, { tick: lineIn(block), from: player.el.currentTime || 0, ver: ver.id,
-                                  done: () => { if (repaint) repaint(); } }).then(() => { if (repaint) repaint(); });
-      });
-    };
-
     const block = abOn ? abBlock(c, ver, { controls, stop: stopAudio,
       seg: (from, to, done, which) => {
         play(c, ver.media.ab || ver.media.reference, { from, to, tick: lineIn(block), ver: ver.id, done });
         listen.seg = which;
       },
       playing: () => (owns(c, ver.id) ? listen.seg : null) }) : laneBlock(c, ver, {
-      at: c.at, controls, duration: ver.duration, vn: version, state: listen,
-      showCut: controls && showCut.has(c.id),
-      keep: controls ? (p) => cutHere.has(`${c.id}|${ver.id}|${p.id}`) : null,
+      at: c.at, controls, duration: ver.duration, vn: version,
 
       on: (act, p, btn) => {
 
         const scoped = ver.bundleItem ? { version: ver.n, item: ver.bundleItem } : {};
 
-        if (act === "tag") {
-          btn.dispatchEvent(new CustomEvent("lanetag", { bubbles: true, detail: p.id }));
-          return;
-        }
-        if (act === "mute") {
-          const m = !listen.muted.has(p.id);
-          m ? listen.muted.add(p.id) : listen.muted.delete(p.id);
-
-          if (listen.el === B && same(listen.card, c) && !listen.solo) B.setGain(p.id, m ? 0 : 1);
-          else if (mixStreaming()) toLanes();
-          if (repaint) repaint();
-        } else if (act === "solo") {
-          if (listen.solo === p.id) { stopAudio(); c.at = null; if (repaint) repaint(); }
-          else {
-            // from the playhead: this version playing (the mix, the lanes or another solo), or paused on it
-            const pa = pausedAt.get(c.id), q = (id) => ((partsOf(c, version).find((x) => x.id === id) || {}).time || {});
-            const now = owns(c, ver.id) && listen.el && Number.isFinite(listen.el.currentTime)
-              ? listen.el.currentTime + (listen.solo ? q(listen.solo).start || 0 : 0)
-              : pa && pa.ver === ver.id && pa.at > 0 && pa.at < 0.995 ? (pa.secs != null ? pa.secs : pa.at * (ver.duration || 0))
-              : null;
-            // nothing playing or paused here: from a second before the lane's own sound, not from the silence before it
-            const from = now == null ? Math.max(0, firstSound(p, ver.duration) - 1)
-              : Math.max(0, now - ((p.time || {}).start || 0));
-            play(c, p.audio, { tick: lineIn(block), ver: ver.id, done: repaint, ...(from > 0.05 ? { from } : {}) });
-            listen.solo = p.id;
-            if (repaint) repaint();
-          }
-        } else if (act === "src") {
-          if (p.src) openCode(p);
-        } else if (act === "clip") {
+        if (act === "clip") {
 
           addToArrangement(c, d, p, btn, ver);
         } else if (act === "params") {
@@ -1784,9 +1573,6 @@ export function build() {
           box.append(panel);
         } else if (act === "cut") {
 
-          if (!p.archived) cutHere.add(`${c.id}|${ver.id}|${p.id}`);
-          if (!p.archived && listen.el === B && same(listen.card, c) && !listen.solo) B.setGain(p.id, 0);
-          else if (!p.archived && mixStreaming()) { listen.muted.add(p.id); toLanes(); }
           writeSignal(c, d, { kind: "archive", voice: p.id, value: !p.archived, ...scoped },
                       () => { if (repaint) repaint(); });
         }
@@ -1797,7 +1583,7 @@ export function build() {
 
       const pb = el("div.vplay", {}, playGlyphs(controls ? 22 : abOn ? 20 : 15));
 
-      if (owns(c, ver.id) && !listen.solo) pb.classList.add("on");
+      if (owns(c, ver.id)) pb.classList.add("on");
       const vid = (ver.media || {}).video;
 
       const audio = abOn ? ver.media.ab || ver.media.reference : (ver.media || {}).audio;
@@ -1810,29 +1596,23 @@ export function build() {
         const span = (c.origin || {}).kind === "recording" && c.trim
           ? { from: c.trim.start, to: c.trim.end } : {};
         const fin = () => { pb.classList.remove("on"); if (repaint) repaint(); };
-        if (allCut && !span.from) { toast("every band is taken out — nothing to play"); return; }
 
         const pa = pausedAt.get(c.id);
         const r = pa && pa.ver === ver.id && pa.at > 0 && pa.at < 0.995
           ? (pa.secs != null ? pa.secs : pa.at * (ver.duration || 0)) : 0;
         pausedAt.delete(c.id);
-        if (controls && bandParts.length && !span.from && !mixWhole()) {
-          playBands(c, bandParts, { tick: lineIn(block), done: fin, ver: ver.id, from: r })
-            .then((ok) => { if (ok) pb.classList.add("on"); });
-        } else {
-          if (!audio) return;
-          play(c, audio, { tick: lineIn(block), ...span, ...(r ? { from: Math.max(span.from || 0, r) } : {}),
-                           done: fin, ver: ver.id });
-        }
+        if (!audio) return;
+        play(c, audio, { tick: lineIn(block), ...span, ...(r ? { from: Math.max(span.from || 0, r) } : {}),
+                         done: fin, ver: ver.id });
         pb.classList.add("on");
       };
-      if (vid || audio || allCut) {
+      if (vid || audio) {
         pb.onclick = (e) => {
           e.stopPropagation();
 
           if (vid && controls) { if (repaint) repaint(true); return; }
 
-          if (owns(c, ver.id) && listen.solo === null) {
+          if (owns(c, ver.id)) {
             const at = c.at;
 
             const secs = listen.el && Number.isFinite(listen.el.currentTime) ? listen.el.currentTime : null;
@@ -1847,33 +1627,21 @@ export function build() {
         };
       }
 
-      if (autoplay && (audio || bandParts.length)) requestAnimationFrame(() => {
+      if (autoplay && audio) requestAnimationFrame(() => {
         if (!block.isConnected) return;
-        const sp = autoplay.solo && (ver.parts || []).find((q) => q.id === autoplay.solo && q.audio);
-        if (autoplay.from != null && !sp) {
-          const lanes = controls && bandParts.length && !mixWhole();
-          if (!lanes && listen.el === player.el && player.el.getAttribute("src") === audio) {
+        if (autoplay.from != null) {
+          if (listen.el === player.el && player.el.getAttribute("src") === audio) {
             listen.card = c; listen.ver = ver.id; listen.tick = lineIn(block);      // the same sound: it goes on as it is
             pb.classList.add("on");
             return;
           }
           pausedAt.set(c.id, { ver: ver.id, at: autoplay.from / (ver.duration || autoplay.from + 1), secs: autoplay.from });
-          startMix();
-        } else if (sp && controls) {
-          play(c, sp.audio, { tick: lineIn(block), ver: ver.id, done: repaint });
-          listen.solo = sp.id;
-          if (repaint) repaint();
-        } else startMix();
+        }
+        startMix();
       });
       if (audio) {
         block.dataset.audio = audio;
-        scrubbable(block, c, audio, pb, repaint, controls,
-          allCut ? () => toast("every band is taken out — nothing to play")
-          : controls && bandParts.length && !mixWhole()
-            ? (f) => playBands(c, bandParts, { tick: lineIn(block), from: f * (ver.duration || 0),
-                                               ver: ver.id,
-                                               done: () => { pb.classList.remove("on"); if (repaint) repaint(); } })
-            : null, ver.id);
+        scrubbable(block, c, audio, pb, repaint, controls, ver.id);
 
         if (!controls && owns(c, ver.id)) requestAnimationFrame(() => {
           if (!block.isConnected || !owns(c, ver.id)) return;
@@ -1894,7 +1662,7 @@ export function build() {
       }
 
       const wrap = el("div.vwrap");
-      wrap.append(el("div.vscroll", {}, [block, cutNote(c, version, repaint)]));
+      wrap.append(el("div.vscroll", {}, [block]));
       if (!abOn) wrap.append(pb);
       if (!abOn) wrap.append(fullButton(c));
 
@@ -3241,10 +3009,13 @@ export function build() {
                     [el("i.auxfill"), el("i.auxline"), el("span.auxab")]);
     const abs = () => (s.sh.hidden ? [] : [...s.sh.querySelectorAll(".abplay")]);
     auxA.onclick = () => { const b = abs()[0]; if (b) b.click(); };
-    const scrubBlock = () => [...s.sh.querySelectorAll(".vblock")].find((b) => b.scrub) || null;
+    const scrubBlock = () => [...s.sh.querySelectorAll(".vblock, .np")].find((b) => b.scrub) || null;
     let pid = null, sx = 0, dragging = false, swallow = false, dragF = null;
     const fracX = (x) => { const r = auxTab.getBoundingClientRect(); return Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))); };
     const pin = (t, f) => {
+      const key = f == null ? null : (f * 100).toFixed(1);          // each frame asks; only a change is written
+      if (t.pinned === key) return;
+      t.pinned = key;
       const [fl, ln] = t.querySelectorAll(".auxfill, .auxline");
       ln.hidden = fl.hidden = f == null;
       if (f != null) { ln.style.left = `${(f * 100).toFixed(1)}%`; fl.style.width = `${(f * 100).toFixed(1)}%`; }
@@ -3266,6 +3037,7 @@ export function build() {
       let f = dragF;
       if (f == null) {
         const b = scrubBlock(), l = b && b.querySelector(".vline"), g = l && laneBox(b);
+        if (b && b.at) { pin(auxTab, b.at()); return; }
         f = g ? Math.max(0, Math.min(1, (l.getBoundingClientRect().left - g.left) / g.width)) : null;
       }
       pin(auxTab, f);
@@ -3388,8 +3160,6 @@ export function build() {
       stopAudio();
     }
     if (kind === "big") pausePlayer();
-
-    if (kind === "big") bandGen++;
 
     if (kind === "big") listen.tick = null;
 
@@ -3841,7 +3611,6 @@ export function build() {
 
     const isRec = (c.origin || {}).kind === "recording";
 
-    if (listen.mutedFor !== c.id) { listen.muted.clear(); listen.mutedFor = c.id; }
     const field = el("textarea.ideabox", { rows: "2",
       placeholder: isRec ? "what to make of this recording… (optional)" : "what should change…" });
     field.value = draftGet(c.id);
@@ -3863,8 +3632,8 @@ export function build() {
       const ins = (pre && !/\s$/.test(pre) ? " " : "") + tag + (post && /^\s/.test(post) ? "" : " ");
       field.value = pre + ins + post;
       const caret = (pre + ins).length;
-      field.focus();
-      field.setSelectionRange(caret, caret);
+      // a phone's keyboard would cover the lanes: the words go in, the caret only where there's a mouse
+      if (matchMedia("(hover:hover) and (pointer:fine)").matches) { field.focus(); field.setSelectionRange(caret, caret); }
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
@@ -3924,8 +3693,8 @@ export function build() {
     let trimEl = null;
     let cropping = false, paintCropBtn = () => {};
     // a card playing on the grid goes on in the open card's player, from where it is
-    let resume = listen.el && same(listen.card, c) && !listen.solo && !listen.loading
-      && Number.isFinite(listen.el.currentTime) && !listen.el.paused ? { solo: null, from: listen.el.currentTime } : null;
+    let resume = listen.el && same(listen.card, c)
+      && Number.isFinite(listen.el.currentTime) && !listen.el.paused ? { from: listen.el.currentTime } : null;
 
     const onScreen = () => {
       const cur = (c.versions || [])[sel];
@@ -4018,7 +3787,8 @@ export function build() {
       if (seesBtn.getAttribute("aria-expanded") === "true") paintSees(w);
     };
     const paintHears = async () => {
-      mixed = listen.mutedFor === c.id && listen.muted.size > 0 || (!!listen.solo && same(listen.card, c));
+      const heardHere = openNp && openNp.state;
+      mixed = !!heardHere && (heardHere.muted.length > 0 || !!heardHere.solo);
       const warn = () => seesBtn.classList.toggle("warn",
         mixed || [heard.ins, heard.rev].some((x) => x && !x.label && x.error));
       if (!(d.typeHears || {})[c.type] || !d.signal) { warn(); return; }
@@ -4061,9 +3831,8 @@ export function build() {
         return;
       }
       paintCropBtn();
-      paintNpBtn();
       if (cropping && cropMedia()) return;
-      if (npWanted() && npHere()) { showNew(); return; }
+      if (npHere()) { showNew(); return; }
       if (openNp) { openNp.destroy(); openNp = null; }
       if (typeof v === "boolean") showVideo = v;
       const vs = viewsOf(sel);
@@ -4132,33 +3901,31 @@ export function build() {
     }
     const foot = el("div.cfoot");
 
-    // the new lane player, beside the current one until the swap: a switch in the tools, remembered on this device
-    const npWanted = () => { try { return localStorage.getItem("picker.player") === "new"; } catch (_) { return false; } };
+    // a version's lanes play in the lane player; a reference (A/B), a video, or a picture without timed lanes keep their views
     const npWhere = () => {
       const v = (c.versions || [])[sel] || {}, it = itemAt(sel);
       return { n: v.n ?? sel + 1, item: it ? it.id : null };
     };
-    const npHere = () => !isRec && playable(c, npWhere().n, npWhere().item);
+    const npHere = () => {
+      const m = ((c.versions || [])[sel] || {}).media || {}, w = npWhere();
+      if (isRec || m.video || (cap(c.type, "ab") && (m.ab || m.reference))) return false;
+      const ls = lanesOf(c, w.n, w.item);
+      return ls.length > 0 && (!hasPicture(c) || ls.some((l) => l.time));
+    };
     const npOps = {
       signal: (body) => new Promise((ok) => writeSignal(c, d, body, () => ok(c), () => ok(null))),
       claim: () => stopAudio(),
       toast,
       bar: () => [fullButton(c)],
+      code: (l) => openCode(l),
+      clip: (id, btn) => {
+        const sc = shownCard(), ver = sc.versions[sel], part = (ver.parts || []).find((x) => x.id === id);
+        if (part) addToArrangement(sc, d, part, btn, ver);
+      },
+      tag: (id) => mediaBox.dispatchEvent(new CustomEvent("lanetag", { detail: id })),
+      changed: () => paintHears(),
     };
     if (openNp) { openNp.destroy(); openNp = null; }
-    const npBtn = el("button.npswitch", { type: "button", hidden: "" }, glyph("mixer", 18));
-    const paintNpBtn = () => {
-      npBtn.hidden = !npHere();
-      npBtn.classList.toggle("on", npWanted());
-      npBtn.title = npWanted() ? "back to the current player" : "try the new lane player";
-      npBtn.setAttribute("aria-label", npBtn.title);
-    };
-    npBtn.onclick = () => {
-      try { localStorage.setItem("picker.player", npWanted() ? "old" : "new"); } catch (_) {}
-      if (!npWanted() && openNp) { openNp.destroy(); openNp = null; }
-      else stopAudio();
-      paintMedia();
-    };
     const showNew = () => {
       const w = npWhere();
       if (openNp) openNp.show(c, w);
@@ -4682,7 +4449,7 @@ export function build() {
       if (n > 1) q.set("version", v.n ?? sel + 1);
 
       const bands = (v.parts || []).filter((p) => p.audio && p.kind === "voice");
-      const off = (p) => p.archived || (listen.mutedFor === c.id && listen.muted.has(p.id));
+      const off = (p) => p.archived || (!!openNp && openNp.state.muted.includes(p.id));
       if (bands.some(off)) {
         const on = bands.filter((p) => !off(p));
         if (!on.length) { toast("every band is muted — nothing to download"); return; }
@@ -4706,7 +4473,7 @@ export function build() {
       }, 300);
     };
 
-    tools.append(...[poolBtn, arch, dupBtn, splitBtn, cropBtn, dlBtn, npBtn].filter(Boolean));
+    tools.append(...[poolBtn, arch, dupBtn, splitBtn, cropBtn, dlBtn].filter(Boolean));
 
     const anyViews = Array.from({ length: n }, (_, i) => viewsOf(i).length > 1).some(Boolean);
     const anyItems = Array.from({ length: n }, (_, i) => itemsOf(i).length > 0).some(Boolean);

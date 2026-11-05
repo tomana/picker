@@ -31,23 +31,27 @@ export async function run(log) {
     await showTab(page, "fx_music");
     await page.evaluate((id) => { const a = document.querySelector(`.grid article.card[data-cid="${id}"]`);
       a.scrollIntoView({ block: "center" }); (a.querySelector(".media, .vblock") || a).click(); }, ID);
-    await page.waitForSelector(".sheet.big:not([hidden]) .vblock .vrowc", { timeout: 10000 });
+    await page.waitForSelector(".sheet.big:not([hidden]) .np-row", { timeout: 10000 });
     await sleep(600);
     // ▶ on the late lane, nothing playing: a second before its sound
-    const solo = (i) => page.evaluate((i) => document.querySelectorAll(".sheet.big .vblock > .vrowc")[i]
-      .querySelector("button.vc.big:not(.mute)").click(), i);
+    const solo = (i) => page.evaluate((i) => document.querySelectorAll(".sheet.big .np-row")[i]
+      .querySelector(".np-solo").click(), i);
+    const head = () => page.$eval(".sheet.big .np-t", (e) => e.textContent);
     await solo(2);
     await sleep(900);
-    const at = secs(await page.$eval(".sheet.big .vblock .vline", (l) => l.dataset.t));
+    const at = secs(await head());
     const want = 0.6 * v.duration - 1;
     assert(got.some((g) => g.endsWith(new URL(lanes[2].audio, "http://x").pathname)), `it streams the lane: ${got.join(", ")}`);
     assert(at != null && at >= want - 0.3 && at <= want + 1.5, `it starts a second before the lane's sound (${want.toFixed(1)} s): at ${at}`);
-    // stopped, then the first lane, which sounds from the top: from the top
+    // stopped and back at the top (the ruler's left end), then the first lane, which sounds from the top: from the top
     await solo(2);
+    await sleep(300);
+    const r = await page.$eval(".sheet.big .np-rcell", (e) => { const b = e.getBoundingClientRect(); return { x: b.left, y: b.top + b.height / 2 }; });
+    await page.touchscreen.tap(r.x + 0.5, r.y);
     await sleep(300);
     await solo(0);
     await sleep(900);
-    const at0 = secs(await page.$eval(".sheet.big .vblock .vline", (l) => l.dataset.t));
+    const at0 = secs(await head());
     assert(at0 != null && at0 < 1.5, `a lane that sounds from the top starts there: ${at0}`);
     assert(!errs.length, "page errors: " + errs.slice(0, 4).join(" | "));
     log(`the late lane's ▶ at ${at} s (its sound at ${(0.6 * v.duration).toFixed(1)} s), the first lane's at ${at0} s`);

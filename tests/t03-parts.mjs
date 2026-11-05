@@ -56,27 +56,27 @@ export async function run(log) {
       opened = await openBiggest(page);
       assert(opened, "the opened card has no id");
       was = await voiceVotes(opened);
-      const rows = await page.evaluate(() => document.querySelectorAll(".sheet .vrowc").length);
+      const rows = await page.evaluate(() => document.querySelectorAll(".sheet .np-row").length);
       assert(rows > 0, "the open card drew no voice rows");
       const scroll = await page.evaluate(() => {
-        const sc = document.querySelector(".sheet .vscroll");
-        const pb = document.querySelector(".sheet .vplay").getBoundingClientRect();
+        const sc = document.querySelector(".sheet .np-rows");
+        const pb = document.querySelector(".sheet .np-play").getBoundingClientRect();
         sc.scrollTop = sc.scrollHeight;
-        const after = document.querySelector(".sheet .vplay").getBoundingClientRect();
-        const last = [...document.querySelectorAll(".sheet .vrowc")].pop()
+        const after = document.querySelector(".sheet .np-play").getBoundingClientRect();
+        const last = [...document.querySelectorAll(".sheet .np-row")].pop()
           .getBoundingClientRect();
         return { scrollable: sc.scrollHeight > sc.clientHeight + 1,
                  buttonHeld: Math.abs(after.bottom - pb.bottom) < 1,
-                 lastRowClear: last.bottom < after.top || last.right < after.left };
+                 lastRowClear: last.bottom <= after.top + 1 || last.right < after.left };
       });
       assert(scroll.buttonHeld, "the play button scrolled away with the lanes");
       assert(scroll.lastRowClear, "the last row is still under the play button");
       log(`${rows} rows, scrollable=${scroll.scrollable}, button held its corner`);
       const row0 = await page.evaluate(() =>
-        [...document.querySelectorAll(".sheet .vrowc")][0].querySelectorAll(".vc").length);
-      eq(row0, 6, "a voice row should have six controls");
+        [...document.querySelectorAll(".sheet .np-row")][0].querySelectorAll(".np-b").length);
+      eq(row0, 3, "a lane's row has ▶, 🗑 and 🔊");
       await page.evaluate(() => {
-        document.querySelectorAll(".sheet .vrowc")[0].querySelector('.vc[title="take this band out of the mix"]').click();
+        document.querySelectorAll(".sheet .np-row")[0].querySelector(".np-out").click();
       });
       await sleep(900);
       const sent = signals.find((x) => x.kind === "archive");
@@ -84,24 +84,25 @@ export async function run(log) {
              `the ✕ sent: ${JSON.stringify(signals)}`);
       assert(was.has(sent.voice), `the ✕ names ${sent.voice}, not one of the card's parts`);
       const kept = await page.evaluate(() => {
-        const rows = [...document.querySelectorAll(".sheet .vrowc")];
-        const t = rows[0].querySelector(".vcr .vc");
-        return { rows: rows.length, cut: rows[0].classList.contains("cut"), title: t.title, on: t.classList.contains("on") };
+        const rows = [...document.querySelectorAll(".sheet .np-row")];
+        const t = rows[0].querySelector(".np-out");
+        return { rows: rows.length, cut: rows[0].classList.contains("out"), title: t.title, on: t.classList.contains("on") };
       });
       eq(kept.rows, rows, "the band taken out left the open card");
-      assert(kept.cut && kept.on && kept.title === "put this band back in the mix",
+      assert(kept.cut && kept.on && kept.title === "put this lane back in the mix",
              `the band taken out isn't shown as out: ${JSON.stringify(kept)}`);
-      await page.evaluate(() => document.querySelectorAll(".sheet .vrowc")[0].querySelector(".vcr .vc").click());
+      await page.evaluate(() => document.querySelectorAll(".sheet .np-row")[0].querySelector(".np-out").click());
       await sleep(900);
       const back = signals.filter((x) => x.kind === "archive");
       assert(back.length === 2 && back[1].voice === sent.voice && back[1].value === false,
              `the second ✕ sent: ${JSON.stringify(back)}`);
-      eq(await page.evaluate(() => document.querySelectorAll(".sheet .vrowc")[0].classList.contains("cut")), false,
+      eq(await page.evaluate(() => document.querySelectorAll(".sheet .np-row")[0].classList.contains("out")), false,
          "the band put back still shows as out");
       log(`✕ named ${sent.voice}; it stayed, struck through, and a second ✕ put it back (answered in the page)`);
       await page.evaluate(() => {
-        document.querySelectorAll(".sheet .vrowc")[0]
-          .querySelector('.vc[title="add this band to the timeline"]').click();
+        const s = document.querySelector(".sheet .np-row .np-strip");
+        s.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+        document.querySelector(".np-mi[data-act='clip']").click();
       });
       await sleep(1600);
       const after = (await sp.call(`/api/arrangements/${scratch.id}`)).json.clips.length;

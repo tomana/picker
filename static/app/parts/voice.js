@@ -1,6 +1,6 @@
 /* Times are seconds relative to version duration; absent timing fills the lane and absent peaks use a stable ID seed. */
 
-import { el, seedOf, voiceColor, glyph } from "../dom.js";
+import { el, seedOf, voiceColor } from "../dom.js";
 
 /* Keep lane geometry uniform across cards; overlays must not consume waveform space. */
 
@@ -152,91 +152,21 @@ function voiceLane(p, duration, h = LANE_VB, tint = null, trim = null) {
   return l;
 }
 
-/* Report control actions to the caller; renderers must not own API state. */
-
-function voiceRow(p, duration, on, state, tint = null, trim = null) {
-  const btn = (text, title, cls = "", act = null, disabled = false) => {
-    const b = el("button.vc" + cls, { type: "button", title, "aria-label": title });
-    if (typeof text === "string") b.textContent = text; else b.append(text);
-    if (disabled) { b.disabled = true; b.title = title + " — not built yet"; }
-    else if (act && on) b.onclick = (e) => { e.stopPropagation(); on(act, p, b); };
-    return b;
-  };
-  const muted = state.muted.has(p.id);
-  const soloed = state.solo === p.id;
-  /* Solo plays one voice; mute affects that voice within whole-card playback. */
-
-  return el("div.vrowc" + (p.archived ? ".cut" : "") + (muted ? ".muted" : ""), {}, [
-    btn(glyph(soloed ? "stop" : "play", 22), soloed ? "stop" : "play this band alone",
-        ".big" + (soloed ? ".on" : ""), "solo"),
-    tagName(voiceLane(p, duration, LANE_VB, tint, trim), p, on),
-    el("div.vcr", {}, [
-      btn(glyph("trash", 14), p.archived ? "put this band back in the mix" : "take this band out of the mix",
-          p.archived ? ".on" : "", "cut"),
-      btn(glyph("code", 14), "open its source (.scd)", "", p.src ? "src" : null, !p.src),
-      btn(glyph("tlplus", 15), "add this band to the timeline", "", "clip"),
-      btn(glyph("comment", 14), `put lane:${p.id} in the comment`, "", "tag"),
-    ]),
-    btn(glyph(muted ? "speakermute" : "speaker", 22), muted ? "unmute this band" : "mute this band",
-        ".big.mute" + (muted ? ".on" : ""), "mute"),
-  ]);
-}
-
-/* Only expanded-card labels tag requests; grid labels must stay transparent to scrubbing. */
-
-function tagName(lane, p, on) {
-  const nm = lane.querySelector(".sname");
-  if (nm && on) {
-    nm.classList.add("tag");
-    nm.title = `put lane:${p.id} in the comment`;
-    nm.addEventListener("click", (e) => { e.stopPropagation(); on("tag", p, nm); });
-  }
-  return lane;
-}
-
 /* Playhead positions are fractions; null means the card is not playing. */
 
-export function voiceBlock(parts, { max = VOICE_ROWS, at = null, duration = null,
-                                    controls = false, on = null, showCut = false, keep = null,
-                                    state = null, tint = null, trim = null } = {}) {
-  /* Expanded cards expose every audible band; cut bands stay recoverable and an all-cut tile remains visible. */
-
+export function voiceBlock(parts, { max = VOICE_ROWS, at = null, duration = null, tint = null, trim = null } = {}) {
+  /* An all-cut tile remains visible. */
   const kept = parts.filter((p) => !p.archived);
-  const list = controls ? (showCut ? parts : parts.filter((p) => !p.archived || (keep && keep(p))))
-    : (kept.length ? kept : parts).slice(0, max);
-  const st = state || { muted: new Set(), solo: null };
+  const list = (kept.length ? kept : parts).slice(0, max);
   const b = el("div.vblock");
-  if (controls && duration > 0) b.dataset.dur = String(duration);   /* Use CSS row properties, not inline tracks, so expanded cards can override the grid layout. */
-
+  /* Use CSS row properties, not inline tracks, so a sheet can override the grid layout. */
   b.style.setProperty("--rows", String(VOICE_ROWS));
   b.style.setProperty("--vn", String(list.length));
-  for (const p of list)
-    b.append(controls ? voiceRow(p, duration, on, st, tint, trim)
-                      : voiceLane(p, duration, LANE_VB, tint, trim));
+  for (const p of list) b.append(voiceLane(p, duration, LANE_VB, tint, trim));
   if (at != null) {
     const line = el("i.vline");
     line.style.left = `${(at * 100).toFixed(1)}%`;
-    if (controls && duration > 0) {
-      line.dataset.t = clock(at * duration);
-      line.classList.toggle("r", at > 0.8);
-    }
     b.append(line);
-    /* Hide the open-card playhead until attached, then position against lanes rather than surrounding controls. */
-
-    if (controls) { line.style.visibility = "hidden"; placeOnLanes(b, line, at); }
   }
   return b;
-}
-
-function placeOnLanes(b, line, at, tries = 0) {
-  requestAnimationFrame(() => {
-    const lane = b.isConnected && b.querySelector(".lane");
-    const r = lane && lane.getBoundingClientRect();
-    if (!r || !r.width) {
-      if (tries < 30) placeOnLanes(b, line, at, tries + 1); else line.style.visibility = "";
-      return;
-    }
-    line.style.left = `${(r.left - b.getBoundingClientRect().left + at * r.width).toFixed(1)}px`;
-    line.style.visibility = "";
-  });
 }

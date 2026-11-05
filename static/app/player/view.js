@@ -1,24 +1,28 @@
-/* The open card's player for a version with lanes: a ruler, a row per lane, one playhead, a transport bar. It owns
+/* The open card's player for a version with lanes: a ruler, a row per lane, one playhead, ▶ in the lanes' corner. It owns
    one state (state.js) and one engine (engine.js); rows are drawn once and changed in place. The page hands it
-   `ops`: signal(body) → the fresh card (the take-out's answer), claim() (stop the page's other players), toast, and
-   bar() → the page's own buttons for the transport bar. */
+   `ops`: signal(body) → the fresh card (the take-out's answer), claim() (stop the page's other players), toast,
+   bar() → the page's own buttons beside ▶, code(lane), clip(id, button), tag(id), changed(). */
 
-import { el, glyph } from "../dom.js";
+import { el, glyph, playGlyphs } from "../dom.js";
 import { clock, firstSound } from "../parts/voice.js";
 import { sourceOf, initial, reduce, program, outSignal } from "./state.js";
 import { createEngine } from "./engine.js";
 
 const WAVE = "#88a3bf";
 let current = null;                     // the player that may be sounding; the page's stop pauses it
+const kept = new Map();                 // card id → its mutes and where ⏸ left it, for this page's life
 
 /* The page's stopAudio calls this: something else is about to play. */
 export function pausePlayer() { if (current) current.pause(); }
 
-/* Whether a version (or item) is the new player's: it has lanes with their own files. */
-export function playable(card, n, item = null) { return sourceOf(card, n, item).lanes.length > 0; }
+/* The lanes with their own files that a version (or item) plays. */
+export function lanesOf(card, n, item = null) { return sourceOf(card, n, item).lanes; }
 
 export function createPlayer(card, where, ops, { resume = null } = {}) {
-  let P = initial(sourceOf(card, where.n, where.item));
+  const memo = kept.get(card.id) || { muted: [] };
+  kept.set(card.id, memo);
+  const left = memo.left && memo.left.n === where.n && memo.left.item === where.item ? memo.left.s : 0;
+  let P = initial(sourceOf(card, where.n, where.item), { muted: memo.muted, position: left });
   let scrubAt = null, claiming = false;
   const engine = createEngine({
     onTick: (s) => place(s),
@@ -26,23 +30,21 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
     onError: (m) => { ops.toast(`the player: ${m}`); },
   });
 
-  const root = el("div.np", { "data-np": "" });
+  const root = el("div.vwrap.np", { "data-np": "" });
   const lanes = el("div.np-lanes");
   const ruler = el("div.np-ruler", { title: "tap or drag: move the playhead" });
   const tcv = el("canvas.np-ticks");
   const rtime = el("span.np-t");
-  ruler.append(el("i.np-r0"), el("div.np-rcell", {}, [tcv]), rtime);
+  const rtotal = el("span.np-d");
+  const rtext = document.createTextNode("");
+  rtime.append(rtext);
+  ruler.append(el("i.np-r0"), el("div.np-rcell", {}, [tcv]), el("span.np-tt", {}, [rtime, rtotal]));
   // the ruler scrolls with the rows (sticky), so a scrollbar narrows both alike; the head is over both
   const rows = el("div.np-rows");
   const head = el("i.np-head");
   lanes.append(rows, head);
-  const playBtn = el("button.np-play", { type: "button", title: "play", "aria-label": "play" });
-  const over = el("div.np-over", { title: "the whole piece: tap or drag to move" });
-  const ocv = el("canvas"), fill = el("i.np-fill");
-  over.append(ocv, fill);
-  const time = el("span.np-time");
-  const bar = el("div.np-bar", {}, [playBtn, over, time, ...(ops.bar ? ops.bar() : [])]);
-  root.append(lanes, bar);
+  const playBtn = el("div.vplay.np-play", { title: "play", "aria-label": "play" }, playGlyphs(22));
+  root.append(lanes, playBtn, ...(ops.bar ? ops.bar() : []));
 
   const rowOf = new Map();
   const paintRows = () => {
@@ -55,8 +57,8 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
       solo.onclick = () => soloTap(l.id);
       out.onclick = () => outTap(l.id);
       mute.onclick = () => dispatch({ type: "mute", lane: l.id, on: !lane(l.id).muted });
-      seekSurface(strip, true);
       const row = el("div.np-row", { "data-lane": l.id }, [solo, strip, out, mute]);
+      seekSurface(row, { strip, hold: (down) => laneMenu(l, strip, down) });
       rowOf.set(l.id, { row, solo, out, mute, strip });
       return row;
     }));
@@ -84,7 +86,6 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
       r.mute.title = l.muted ? "unmute (only here, never sent)" : "mute (only here, never sent)";
       r.mute.classList.toggle("on", l.muted);
     }
-    playBtn.replaceChildren(glyph(engine.playing ? "pause" : "play", 24));
     playBtn.classList.toggle("on", engine.playing);
     playBtn.title = engine.playing ? "pause" : "play";
     root.classList.toggle("playing", engine.playing);
@@ -97,14 +98,16 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
     const c = ruler.querySelector(".np-rcell").getBoundingClientRect(), b = lanes.getBoundingClientRect();
     geo = c.width ? { x0: c.left - b.left, w: c.width } : null;
   };
+  let wasX = null, wasT = null, wasD = null;   // a frame writes only what changed: nothing else may compete with the sound
   const place = (s) => {
     const at = scrubAt != null ? scrubAt : s, d = P.duration || 0;
     const f = d > 0 ? Math.max(0, Math.min(1, at / d)) : 0;
     if (!geo) measure();
-    if (geo) head.style.transform = `translateX(${(geo.x0 + f * geo.w).toFixed(1)}px)`;
-    fill.style.width = `${(f * 100).toFixed(2)}%`;
-    rtime.textContent = clock(at);
-    time.textContent = `${clock(at)} / ${clock(d)}`;
+    const x = geo ? (geo.x0 + f * geo.w).toFixed(1) : null;
+    if (x !== null && x !== wasX) { head.style.transform = `translateX(${x}px)`; wasX = x; }
+    const t = clock(at);
+    if (t !== wasT) { rtext.nodeValue = t; wasT = t; }
+    if (d !== wasD) { rtotal.textContent = ` / ${Math.floor(d / 60)}:${String(Math.round(d % 60)).padStart(2, "0")}`; wasD = d; }
   };
 
   const draw = (cv, peaks, a = 0, b = 1) => {
@@ -134,13 +137,10 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
   };
   const drawAll = () => {
     measure();
-    const sum = [];
     for (const l of P.lanes) {
-      const r = rowOf.get(l.id), pk = peaksOf(l);
-      if (r) draw(r.strip.querySelector("canvas"), pk, ...spanOf(l));
-      if (pk && !l.time) pk.forEach((v, i) => { sum[i] = Math.max(sum[i] || 0, v); });
+      const r = rowOf.get(l.id);
+      if (r) draw(r.strip.querySelector("canvas"), peaksOf(l), ...spanOf(l));
     }
-    draw(ocv, sum.length ? sum : null);
     drawTicks();
     place(engine.playing ? engine.position : P.position);
   };
@@ -149,15 +149,15 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
     if (!r.width || !(d > 0)) return;
     tcv.width = Math.round(r.width * dpr); tcv.height = Math.round(r.height * dpr);
     const g = tcv.getContext("2d"), W = tcv.width, H = tcv.height;
-    const step = [1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => (s / d) * r.width >= 48) || 600;
+    const step = [1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => (s / d) * r.width >= 44) || 600;
     g.fillStyle = "#8a8a8a";
-    g.font = `${10 * dpr}px system-ui, sans-serif`;
-    g.textBaseline = "top";
+    g.font = `${9 * dpr}px system-ui, sans-serif`;
+    g.textBaseline = "middle";
     for (let s = 0; s <= d; s += step) {
       const x = Math.round((s / d) * W);
-      g.fillRect(x, H * 0.55, dpr, H * 0.45);
+      g.fillRect(x, H * 0.3, dpr, H * 0.7);
       const label = s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${s}s`;
-      if (x + 30 * dpr < W) g.fillText(label, x + 3 * dpr, 2 * dpr);
+      if (x + 30 * dpr < W) g.fillText(label, x + 3 * dpr, H / 2);
     }
   };
   const ro = new ResizeObserver(() => requestAnimationFrame(drawAll));
@@ -167,8 +167,10 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
   function dispatch(a) {
     if (engine.playing && a.type !== "pause") P = { ...P, position: engine.position };
     P = reduce(P, a);
+    memo.muted = P.muted;
     paintState();
     sync();
+    if (ops.changed) ops.changed();
   }
   const sync = () => {
     const prog = program(P);
@@ -178,17 +180,21 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
       .then(() => paintState());
   };
 
-  async function start(at = null) {
+  /* The sound is readied first; whatever else plays goes on until this can start. */
+  async function start(at = null, { handover = false } = {}) {
     if (at != null) P = { ...P, position: at };
     const prog = program(P);
     if (!prog.url) { ops.toast("every lane is out or muted — nothing to play"); return; }
-    claiming = true;
-    try { ops.claim(); } finally { claiming = false; }
+    const t0 = performance.now();
     current = api;
     P = { ...P, playing: true };
     paintState();
     await engine.load(prog, P.position);
     if (!P.playing) return;
+    claiming = true;
+    try { ops.claim(); } finally { claiming = false; }
+    const want = P.position + (handover ? (performance.now() - t0) / 1000 : 0);
+    if (Math.abs(engine.position - want) > 0.05) await engine.seek(want);
     await engine.play();
     paintState();
   }
@@ -196,17 +202,71 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
     const at = engine.pause();
     P = reduce(P, { type: "pause", at });
     paintState();
+    return at;
   };
 
-  playBtn.onclick = () => (engine.playing ? stop() : start());
+  playBtn.onclick = () => {
+    if (!engine.playing) { start(); return; }
+    memo.left = { n: P.n, item: P.item, s: stop() };
+  };
 
   const soloTap = (id) => {
-    if (P.solo === id) { dispatch({ type: "solo", lane: null }); return; }
+    if (P.solo === id) {
+      const was = engine.playing;
+      dispatch({ type: "solo", lane: null });
+      if (was) stop();
+      return;
+    }
     const l = lane(id);
     // nothing sounding and at the top: from a second before the lane's own sound (a stem silent until it comes in)
-    const from = !engine.playing && P.position < 0.05 ? Math.max(0, firstSound(l, P.duration) - 1) : null;
+    const from = !engine.playing && P.position < 0.05
+      ? Math.max(0, ((l.time || {}).start || 0) + firstSound(l, P.duration) - 1) : null;
     dispatch({ type: "solo", lane: id });
     if (!engine.playing) start(from);
+  };
+
+  /* A long press, or a right click: what a row has no room for. It stays until a press elsewhere or the rows scroll;
+     the page behind may repaint and scroll under it. */
+  let menu = null;
+  const closeMenu = () => {
+    if (!menu) return;
+    menu.remove();
+    menu = null;
+    removeEventListener("pointerdown", outsideMenu, true);
+    rows.removeEventListener("scroll", closeMenu);
+  };
+  const outsideMenu = (e) => { if (menu && !menu.contains(e.target)) closeMenu(); };
+  const laneMenu = (l, strip, down) => {
+    closeMenu();
+    const item = (act, text, icon, fn) => {
+      const b = el("button.np-mi", { type: "button", "data-act": act }, [glyph(icon, 16), el("span", { text })]);
+      b.onclick = (e) => { e.stopPropagation(); fn(b); closeMenu(); };
+      return b;
+    };
+    menu = el("div.np-menu", {}, [
+      item("out", lane(l.id).out ? "put it back in the mix" : "take it out of the mix", "trash", () => outTap(l.id)),
+      item("clip", "add to the timeline", "tlplus", (b) => ops.clip(l.id, b)),
+      item("tag", `put lane:${l.id} in the comment`, "comment", () => ops.tag(l.id)),
+      ...(l.src ? [item("code", "open its source", "code", () => ops.code(l))] : []),
+    ]);
+    root.append(menu);
+    // it opens under the finger that asked for it: that finger's lift must press nothing
+    if (down) {
+      const opened = menu;
+      opened.style.pointerEvents = "none";
+      const lifted = () => {
+        removeEventListener("pointerup", lifted, true);
+        removeEventListener("pointercancel", lifted, true);
+        setTimeout(() => { opened.style.pointerEvents = ""; }, 60);
+      };
+      addEventListener("pointerup", lifted, true);
+      addEventListener("pointercancel", lifted, true);
+    }
+    const r = strip.getBoundingClientRect(), b = root.getBoundingClientRect();
+    menu.style.left = `${Math.round(Math.max(0, Math.min(r.left - b.left, b.width - menu.offsetWidth)))}px`;
+    menu.style.top = `${Math.round(Math.max(0, Math.min(r.top - b.top, b.height - menu.offsetHeight)))}px`;
+    addEventListener("pointerdown", outsideMenu, true);
+    rows.addEventListener("scroll", closeMenu, { passive: true });
   };
 
   const outTap = async (id) => {
@@ -218,61 +278,100 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
     else dispatch({ type: "pending", lane: id, on: false });
   };
 
-  /* Tap seeks, a sideways drag scrubs (heard), a vertical one scrolls the rows. A cancelled drag ends where it
-     was and the piece plays on. */
-  function seekSurface(node, strip = false) {
-    let id = null, x0 = 0, y0 = 0, moved = false, last = null;
+  /* Tap seeks. A sideways drag moves the head in silence and the sound comes back where it lands; a vertical one
+     scrolls the rows; a long press opens the lane's menu. A drag may start on a row's button: the head then moves by
+     as much as the finger, from where it was, and the button isn't pressed. A cancelled drag lands where it was and
+     the piece plays on. `strip` is what a row's times are measured on. */
+  function seekSurface(node, { strip = null, hold = null } = {}) {
+    let id = null, x0 = 0, y0 = 0, moved = false, last = null, held = false, timer = 0, from = null, swallow = false;
     const timeAt = (x) => {
-      const r = (strip ? node : node.querySelector("canvas") || node).getBoundingClientRect();
-      return Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))) * (P.duration || 0);
+      const r = (strip || node.querySelector("canvas") || node).getBoundingClientRect(), d = P.duration || 0;
+      const f = from != null ? from / Math.max(1e-3, d) + (x - x0) / Math.max(1, r.width)
+                             : (x - r.left) / Math.max(1, r.width);
+      return Math.max(0, Math.min(1, f)) * d;
     };
     node.addEventListener("pointerdown", (e) => {
+      held = false;
+      swallow = false;
       if (e.button) return;
       id = e.pointerId; x0 = e.clientX; y0 = e.clientY; moved = false; last = null;
+      const onButton = !!(e.target.closest && e.target.closest("button"));
+      from = onButton ? (engine.playing ? engine.position : P.position) : null;
+      if (hold && !onButton) timer = setTimeout(() => { held = true; hold(true); }, 500);
       if (!strip) { try { node.setPointerCapture(id); } catch (_) {} }
     });
     node.addEventListener("pointermove", (e) => {
-      if (e.pointerId !== id) return;
+      if (e.pointerId !== id || held) return;
       if (!moved) {
         const dx = Math.abs(e.clientX - x0), dy = Math.abs(e.clientY - y0);
         if (dx < 6 && dy < 6) return;
-        if (strip && dy >= dx) { id = null; return; }
+        clearTimeout(timer);
+        if (strip && e.pointerType === "touch" && dy >= dx) { id = null; return; }   // the rows scroll
         moved = true;
         try { node.setPointerCapture(id); } catch (_) {}
+        engine.hush();
       }
       e.preventDefault();
       last = timeAt(e.clientX);
       scrubAt = last;
       place(last);
-      if (engine.playing) engine.seek(last, { final: false });
     });
     const end = (e, cancelled) => {
+      clearTimeout(timer);
       if (e.pointerId !== id) return;
       id = null;
-      const s = cancelled ? last : timeAt(e.clientX);
       scrubAt = null;
-      if (s == null) return;
-      seekTo(s);
+      const wasHeld = held;
+      held = false;
+      if (wasHeld || (!moved && from != null)) return;       // a menu, or a tap on a button: its own
+      const s = cancelled ? last : timeAt(e.clientX);
+      swallow = moved;
+      if (moved) setTimeout(() => { swallow = false; }, 50);  // a touch drag ends in no click: don't eat a later one
+      if (s != null) seekTo(s);
     };
     node.addEventListener("pointerup", (e) => end(e, false));
     node.addEventListener("pointercancel", (e) => end(e, true));
+    node.addEventListener("click", (e) => {                  // the click a drag ends in presses nothing
+      if (!swallow) return;
+      swallow = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
+    // a right click, or a phone's own long press, which may come before or after the timer
+    if (hold) node.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      clearTimeout(timer);
+      if (held) return;
+      const down = id != null;
+      if (down) held = true;
+      hold(down);
+    });
   }
   const seekTo = (s) => {
     P = reduce(P, { type: "seek", s });
-    if (engine.playing) engine.seek(P.position);
-    else if (engine.key) engine.seek(P.position);
+    if (engine.key) engine.seek(P.position);
     place(P.position);
   };
   seekSurface(ruler);
-  seekSurface(over);
 
   /* A fresh card, or another version or item of it: the same player, the sound moved at the position. */
   function show(c, w) {
-    card = c;
-    const before = P.lanes.map((l) => l.id).join();
+    const drawn = () => P.lanes.map((l) => `${l.id}:${l.peaks}`).join();
+    const before = drawn();
     dispatch({ type: "source", src: sourceOf(c, w.n, w.item) });
-    if (P.lanes.map((l) => l.id).join() !== before) paintRows();
+    if (drawn() !== before) paintRows();
   }
+
+  // the tab under the votes (the page's) drags and mirrors the head as fractions of the piece
+  root.scrub = {
+    start() { engine.hush(); },
+    move(f) { scrubAt = f * (P.duration || 0); place(scrubAt); },
+    end(f) { scrubAt = null; seekTo(f * (P.duration || 0)); },
+  };
+  root.at = () => {
+    const d = P.duration || 0, s = scrubAt != null ? scrubAt : engine.playing ? engine.position : P.position;
+    return d > 0 ? Math.max(0, Math.min(1, s / d)) : null;
+  };
 
   const api = {
     el: root,
@@ -280,9 +379,9 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
     get state() { return P; },
     get engine() { return engine; },
     pause() { if (!claiming && engine.playing) stop(); },
-    destroy() { ro.disconnect(); engine.stop(); if (current === api) current = null; },
+    destroy() { closeMenu(); ro.disconnect(); engine.stop(); if (current === api) current = null; },
   };
   paintRows();
-  if (resume && resume.from != null) start(resume.from);
+  if (resume && resume.from != null) start(resume.from, { handover: true });
   return api;
 }

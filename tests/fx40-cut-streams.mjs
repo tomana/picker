@@ -1,5 +1,5 @@
 import { withPage, assert, eq, sleep, showTab, scratchPicker, settle } from "./lib.mjs";
-export const name = "a version with a lane taken out streams the server's cut mix — no lane decoded, on a card and on a bundle's face item";
+export const name = "a version with a lane taken out streams the server's mix of the lanes left — no lane decoded, on a card and on a bundle's face item";
 
 const CARDS = ["fx0a1b2c3d4e", "fx7a8b9c0d1e"];        // a music card; a bundle, its face item comp1
 export async function run(log) {
@@ -16,7 +16,8 @@ export async function run(log) {
       eq((await sp.call(`/api/cards/${ID}/signal`, { method: "POST", body: sig(true) })).status, 200, "the cut is written");
       try {
         const v = (await sp.call(`/api/cards/${ID}`)).json.versions.at(-1);
-        assert(/\/mix\?/.test(v.media.audio || "") && v.media.audio.includes(lanes[0].id), `${ID}: a cut mix: ${v.media.audio}`);
+        const named = new URL(v.media.audio || "/", "http://x").searchParams.get("lanes") || "";
+        assert(/\/mix\?/.test(v.media.audio || "") && named && !named.split(",").includes(lanes[0].id), `${ID}: a mix of the lanes left: ${v.media.audio}`);
         await withPage(async (page, errs) => {
           await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
           await sp.route(page, () => false);
@@ -28,7 +29,7 @@ export async function run(log) {
           await showTab(page, "fx_music");
           await page.evaluate((id) => { const a = document.querySelector(`.grid article.card[data-cid="${id}"]`);
             a.scrollIntoView({ block: "center" }); (a.querySelector(".media, .vblock") || a).click(); }, ID);
-          await page.waitForSelector(".sheet.big:not([hidden]) .vblock", { timeout: 10000 });
+          await page.waitForSelector(".sheet.big:not([hidden]) .np-row", { timeout: 10000 });
           await sleep(800);
           got.length = 0;
           await page.$eval(".sheet.big .vplay", (b) => b.click());

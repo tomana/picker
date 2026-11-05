@@ -71,7 +71,7 @@ export async function run(log) {
       eq(mapped[0].color, mapped[2].color, "both pools in agy's green");
       assert(mapped[0].color !== mapped[1].color && mapped[2].color !== mapped[3].color,
         "weeks use each pool's deep colour");
-      await page.click(".notch > .ubox:nth-child(3)");
+      await page.$eval(".notch > .ubox:nth-child(3)", (b) => b.click());     // in one step: the box redraws on its own
       await page.waitForFunction((expected) => {
         const box = document.querySelector(".notch > .ubox:nth-child(3)");
         return [...box.querySelectorAll(".ucol > .kbar > .kline > span:first-child")]

@@ -25,10 +25,11 @@ export async function run(log) {
     await showTab(page, "fx_music");
     const open = () => page.evaluate(() => { const a = document.querySelector('.grid article.card[data-cid="fx0a1b2c3d4e"]');
       a.scrollIntoView({ block: "center" }); (a.querySelector(".media, .vblock") || a).click(); });
-    const btn = ".sheet.big button.vc[title^='open its source']";
+    const btn = ".sheet.big .np-strip";
     await open();
     await page.waitForSelector(btn, { timeout: 10000 });
-    await page.$eval(btn, (b) => b.click());
+    await page.$eval(btn, (s) => s.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    await page.$eval(".np-mi[data-act='code']", (b) => b.click());
     await page.waitForSelector(".sheet.code:not([hidden]) .codebody", { timeout: 8000 });
     const link = await page.$eval(".band a.away", (a) => { const r = a.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
     const state = () => page.evaluate(() => ({ code: document.querySelector(".sheet.code").hidden, card: document.querySelector(".sheet.big").hidden,

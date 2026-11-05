@@ -20,9 +20,9 @@ export function sourceOf(card, n, item = null) {
   };
 }
 
-export function initial(src) {
-  return { ...src, lanes: src.lanes.map((l) => ({ ...l, muted: false, pending: false })),
-           solo: null, playing: false, position: 0 };
+export function initial(src, { muted = [], position = 0 } = {}) {
+  return { ...src, muted, lanes: src.lanes.map((l) => ({ ...l, muted: muted.includes(l.id), pending: false })),
+           solo: null, playing: false, position };
 }
 
 const clamp = (s, d) => Math.max(0, Math.min(d > 0 ? d : Infinity, s));
@@ -33,18 +33,18 @@ export function reduce(P, a) {
     case "pause": return { ...P, playing: false, position: a.at != null ? clamp(a.at, P.duration) : P.position };
     case "ended": return { ...P, playing: false, position: 0 };
     case "seek": return { ...P, position: clamp(a.s, P.duration) };
-    case "mute": return { ...P, lanes: P.lanes.map((l) => (l.id === a.lane ? { ...l, muted: !!a.on } : l)) };
+    case "mute": return { ...P, muted: a.on ? [...new Set([...P.muted, a.lane])] : P.muted.filter((x) => x !== a.lane),
+                          lanes: P.lanes.map((l) => (l.id === a.lane ? { ...l, muted: !!a.on } : l)) };
     case "solo": return { ...P, solo: a.lane && P.lanes.some((l) => l.id === a.lane) ? a.lane : null };
     // a take-out or put-back sent, its answer not in yet: the row says so, the sound waits for the card
     case "pending": return { ...P, lanes: P.lanes.map((l) => (l.id === a.lane ? { ...l, pending: !!a.on } : l)) };
     case "source": {
       // a fresh card, or another version or item: what is out comes from the card; mutes and the solo stay by lane id
-      const was = new Map(P.lanes.map((l) => [l.id, l]));
       const moved = a.src.n !== P.n || a.src.item !== P.item;
       const at = !moved ? P.position : a.src.duration >= SHORT ? Math.min(P.position, Math.max(0, a.src.duration - 0.5)) : 0;
       return {
         ...P, ...a.src, position: at,
-        lanes: a.src.lanes.map((l) => ({ ...l, muted: !!(was.get(l.id) || {}).muted, pending: false })),
+        lanes: a.src.lanes.map((l) => ({ ...l, muted: P.muted.includes(l.id), pending: false })),
         solo: P.solo && a.src.lanes.some((l) => l.id === P.solo) ? P.solo : null,
       };
     }
@@ -57,7 +57,7 @@ export function reduce(P, a) {
 export function program(P) {
   if (P.solo) {
     const l = P.lanes.find((x) => x.id === P.solo);
-    if (l) return { kind: "lane", key: `lane:${l.file}`, url: l.file };
+    if (l) return { kind: "lane", key: `lane:${l.file}`, url: l.file, ...(l.time ? { clip: l.time } : {}) };
   }
   const on = P.lanes.filter((l) => !l.out && !l.muted);
   if (!on.length) return { kind: "none", key: "none", url: null };
