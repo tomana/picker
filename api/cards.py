@@ -17,6 +17,7 @@ from core import catalog as CAT
 from core import config as CONFIG
 from core import signals as SIG
 from core import jsonl as J
+from core import plugins as PG
 from core import queue as Q
 from core import stores as ST
 
@@ -322,6 +323,10 @@ def _rows(want: str | None, show_archived: bool) -> tuple:
         for c in out:
             c["need"] = nd.get(c.get("id"))
         out.sort(key=lambda c: -(c.get("need") or {}).get("value", 0))
+        # The plugin may group the cards; each group keeps the need order.
+        rank = PG.call(want, "grid_rank")
+        if rank:
+            out.sort(key=rank)
     # A SCORED TAB (the manifest's `kind`): best first, by its newest version's score
     if want and CONFIG.manifest(want).get("kind") == "scored":
         out.sort(key=_best)

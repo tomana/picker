@@ -124,6 +124,7 @@ picker's tree on `PYTHONPATH`, one at a time per type (a lock in the picker's st
 | `hears(card, job, S)` | a send is about to be queued, or the open card asks |
 | `auto_text(kind)` | AUTO's first words to a job of this type (else core's); `kind` is `revise`, `inspire` or the tuning's id |
 | `auto_eligible(card, kind)` | whether AUTO may make `kind` from the card (else: a recording only inspires) |
+| `grid_rank(card)` | with the `need` capability: the card's group on the grid, lower first; a group keeps the need order, and an open page keeps its order until it reloads |
 
 `S`, the services, is the plugin's only way into the picker: `config`, `stores` (`card_dir(id)`, `cards()`,
 `of_type(type)`: core/stores.py), `research`, `state`, `queue`, `prefs`, `signals`, `trace`, `jsonl`, `arrange`,
