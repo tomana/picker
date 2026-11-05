@@ -1,11 +1,16 @@
 """Researchers own card.json; this layer appends and folds signals.
 Type behavior belongs in plugins; convert media paths only at the HTTP boundary."""
+import hashlib
 import json
 import os
 import re
+import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 
-from flask import Blueprint, abort, jsonify, request, send_file
+from flask import Blueprint, Response, abort, jsonify, request, send_file
 
 from core import catalog as CAT
 from core import config as CONFIG
@@ -75,30 +80,47 @@ def _urls(card: dict, cid: str) -> None:
 _fold = SIG.fold
 
 
-def _cut_out(v: dict) -> tuple[list[dict], list[str]]:
+def _lanes(v: dict, item: str | None = None) -> list[dict] | None:
+    """A version's bands with audio: its face item's (the version's own parts) or a named item's; None for an
+    item the version doesn't have."""
+    if item in (None, "", v.get("face_item")):
+        parts = v.get("parts") or []
+    else:
+        it = next((x for x in v.get("items") or [] if x.get("id") == item), None)
+        if it is None:
+            return None
+        parts = it.get("parts") or []
+    return [p for p in parts if p.get("kind") == "voice" and p.get("audio")]
+
+
+def _cut_out(lanes: list[dict]) -> tuple[list[dict], list[str]]:
     """Keep audible bands in source order and removed band ids in sorted order."""
-    bands = [p for p in v.get("parts") or [] if p.get("kind") == "voice" and p.get("audio")]
-    return ([p for p in bands if not p.get("archived")],
-            sorted(p["id"] for p in bands if p.get("archived")))
+    return ([p for p in lanes if not p.get("archived")],
+            sorted(p["id"] for p in lanes if p.get("archived")))
 
 
 def _cut_mix(v: dict, cid: str) -> None:
-    """Use a cut-aware URL with cut list and content identity; preserve audio_full.
-    All bands removed or a missing kept band makes audio unavailable, never silently incomplete."""
-    m = v.get("media") or {}
-    if not m.get("audio") or v.get("n") is None:
+    """Use a cut-aware URL with cut list and content identity, for the version and each of its items;
+    preserve audio_full. All bands removed or a missing kept band makes audio unavailable, never silently
+    incomplete."""
+    if v.get("n") is None:
         return
-    keep, cut = _cut_out(v)
-    if not cut:
-        return
-    m["audio_full"] = m["audio"]
-    m["audio"] = None
-    if keep:
-        files, missing, key = _mix_plan(cid, v["n"], keep)
-        if missing:
-            m["audio_missing"] = missing
-        else:
-            m["audio"] = f"/api/cards/{cid}/mix?version={v['n']}&cut={','.join(cut)}&k={key}"
+    for owner, item in [(v, None), *((it, it.get("id")) for it in v.get("items") or [])]:
+        m = owner.get("media") or {}
+        if not m.get("audio"):
+            continue
+        keep, cut = _cut_out(_lanes(v, item) or [])
+        if not cut:
+            continue
+        m["audio_full"] = m["audio"]
+        m["audio"] = None
+        if keep:
+            files, missing, key = _mix_plan(cid, v["n"], keep)
+            if missing:
+                m["audio_missing"] = missing
+            else:
+                at = f"&item={item}" if item else ""
+                m["audio"] = f"/api/cards/{cid}/mix?version={v['n']}{at}&cut={','.join(cut)}&k={key}"
 
 
 def read_card(cid: str, *, detail: bool = False, d: Path | str | None = None, stamp: int | None = None) -> dict | None:
@@ -566,7 +588,10 @@ def write_signal(cid):
             rec[k] = body[k]
     J.append_jsonl(d / "signals.jsonl", rec)
     CAT.note(cid)                                # the store's generation moves now, so the answer's need has the vote
-    return jsonify(with_need(read_card(cid, detail=True)))
+    card = read_card(cid, detail=True)
+    if kind == "archive" and rec.get("voice"):
+        _prerender(cid, card, rec.get("version"), rec.get("item"))
+    return jsonify(with_need(card))
 
 
 @bp.post("/api/cards/<cid>/split")
@@ -715,12 +740,17 @@ def prewarm_thumbs(widths=(360,)) -> int:
 
 
 MIX_DIR = CONFIG.get().cache / "mix"
-_mix_lock = __import__("threading").Lock()
+MIX_CAP = 2 << 30                              # bytes of made mixes kept; the least recently played go first
+RENDERS = threading.BoundedSemaphore(2)        # whole mixes made at once
+STREAMS = 2                                    # `from=` encoders at once; a newer one ends the oldest
+_keys: dict[str, threading.Lock] = {}          # one render per content key
+_later: set[str] = set()                       # keys being made in the background
+_streams: list[subprocess.Popen] = []
+_guard = threading.Lock()
 
 
 def _mix_plan(cid: str, n, keep: list[dict]) -> tuple[list[Path], list[str], str]:
     """Key by version, kept bands and file stamps; report missing kept files instead of omitting them."""
-    import hashlib
     files, missing = [], []
     for p in keep:
         f = ST.card_dir(_safe(cid)) / "media" / _safe(str(p["audio"]).split("/")[-1])
@@ -740,63 +770,243 @@ def _version_of(cid: str, n) -> dict:
     return v
 
 
-def mix_file(cid: str, n: int) -> Path:
-    """Sum all kept bands from zero at unit gain and cache by content key.
-    Missing kept audio or no kept bands raises LookupError; encoding failure raises RuntimeError."""
-    import subprocess
-    v = _version_of(cid, n)
-    keep, _ = _cut_out(v)
+def _plan(cid: str, n, item: str | None = None, lanes: list[str] | None = None) -> tuple[list[Path], str]:
+    """The files a mix sums and its content key: the named lanes, or else the version's (item's) kept ones.
+    An unknown version, item or lane, no lane left, or a lane's file missing raises LookupError."""
+    every = _lanes(_version_of(cid, n), item)
+    if every is None:
+        raise LookupError("no such item")
+    if lanes is None:
+        keep, _ = _cut_out(every)
+    else:
+        unknown = set(lanes) - {p["id"] for p in every}
+        if unknown:
+            raise LookupError(f"no such lane: {', '.join(sorted(unknown))}")
+        keep = [p for p in every if p["id"] in set(lanes)]
     if not keep:
         raise LookupError("every band is taken out")
     files, missing, key = _mix_plan(cid, n, keep)
     if missing:
         raise LookupError(f"a kept band's audio is missing: {', '.join(missing)}")
+    return files, key
+
+
+def _amix(files: list[Path], at: float = 0.0) -> list[str]:
+    """ffmpeg's inputs and filter for the sum of `files` at unit gain, each read from `at` s."""
+    cmd = ["-filter_complex_threads", "2"]
+    for f in files:
+        cmd += (["-ss", f"{at:.3f}"] if at else []) + ["-i", str(f)]
+    if len(files) > 1:
+        cmd += ["-filter_complex", f"amix=inputs={len(files)}:normalize=0:duration=longest"]
+    return cmd
+
+
+def _render(files: list[Path], key: str) -> Path:
+    """The made sum of `files`: once per key, at most RENDERS at a time. ffmpeg failing raises RuntimeError."""
     out = MIX_DIR / f"{key}.mp3"
-    with _mix_lock:
-        if not out.is_file():
-            MIX_DIR.mkdir(parents=True, exist_ok=True)
-            tmp = out.with_suffix(f".{os.getpid()}.tmp.mp3")
-            cmd = ["ffmpeg", "-v", "error", "-y"]
-            for f in files:
-                cmd += ["-i", str(f)]
-            if len(files) > 1:
-                cmd += ["-filter_complex", f"amix=inputs={len(files)}:normalize=0:duration=longest"]
-            r = subprocess.run(cmd + ["-c:a", "libmp3lame", "-q:a", "2", str(tmp)],
+    with _guard:
+        lock = _keys.setdefault(key, threading.Lock())
+    with lock:
+        if out.is_file():
+            os.utime(out, ns=(time.time_ns(), out.stat().st_mtime_ns))     # played: last out of the cache
+            return out
+        MIX_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_suffix(f".{os.getpid()}.tmp.mp3")
+        with RENDERS:
+            r = subprocess.run(["ffmpeg", "-v", "error", "-y", *_amix(files),
+                                "-threads", "1", "-c:a", "libmp3lame", "-q:a", "2", str(tmp)],
                                capture_output=True, text=True, timeout=180)
-            if r.returncode:
-                tmp.unlink(missing_ok=True)
-                raise RuntimeError(f"ffmpeg: {r.stderr.strip()[-300:]}")
-            os.replace(tmp, out)
+        if r.returncode:
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError(f"ffmpeg: {r.stderr.strip()[-300:]}")
+        os.replace(tmp, out)
+    _prune()
     return out
+
+
+def _prune() -> None:
+    """Keep the made mixes under MIX_CAP, the least recently played out first."""
+    fs = []
+    for p in MIX_DIR.glob("*.mp3"):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if ".tmp." not in p.name:
+            fs.append((st.st_atime_ns, st.st_size, p))
+    total = sum(size for _, size, _ in fs)
+    for _, size, p in sorted(fs):
+        if total <= MIX_CAP:
+            break
+        p.unlink(missing_ok=True)
+        total -= size
+
+
+def _render_later(files: list[Path], key: str) -> None:
+    """Make the mix on a thread unless it is made or on its way."""
+    with _guard:
+        if key in _later or (MIX_DIR / f"{key}.mp3").is_file():
+            return
+        _later.add(key)
+
+    def run():
+        try:
+            _render(files, key)
+        except Exception as e:                       # nobody waits on it; the next ask makes it
+            print(f"mix {key}: {e}", file=sys.stderr)
+        finally:
+            with _guard:
+                _later.discard(key)
+    threading.Thread(target=run, daemon=True, name=f"mix-{key}").start()
+
+
+def _stream(files: list[Path], at: float, made: Path | None):
+    """The sum from `at` s as mp3, encoded while it is sent: the made file cut from there, or the lanes mixed
+    from there. Only the newest STREAMS run: an older one's listener has moved on."""
+    src = (["-ss", f"{at:.3f}", "-i", str(made), "-c:a", "copy"] if made
+           else [*_amix(files, at), "-threads", "1", "-c:a", "libmp3lame", "-q:a", "2"])
+    proc = subprocess.Popen(["ffmpeg", "-v", "error", *src, "-write_xing", "0", "-f", "mp3", "-"],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    with _guard:
+        _streams.append(proc)
+        old = _streams[:-STREAMS]
+        del _streams[:-STREAMS]
+    for p in old:
+        p.kill()
+
+    def chunks():
+        try:
+            while b := proc.stdout.read1(65536):
+                yield b
+        finally:
+            proc.kill()
+            proc.wait()
+            proc.stdout.close()
+            with _guard:
+                if proc in _streams:
+                    _streams.remove(proc)
+    return chunks()
+
+
+def _prerender(cid: str, card: dict, n, item: str | None) -> None:
+    """A band out or back in: make the version's (item's) mix now, so the next play finds it made."""
+    vs = card.get("versions") or []
+    v = next((x for x in vs if x.get("n") == n), None) if n is not None else (vs[-1] if vs else None)
+    if v is None:
+        return
+    keep, cut = _cut_out(_lanes(v, item) or [])
+    if keep and cut:
+        files, missing, key = _mix_plan(cid, v["n"], keep)
+        if not missing:
+            _render_later(files, key)
+
+
+def mix_file(cid: str, n: int, item: str | None = None, lanes: list[str] | None = None) -> Path:
+    """Sum the kept bands (or the named ones) from zero at unit gain, cached by content key.
+    Missing kept audio or no kept bands raises LookupError; encoding failure raises RuntimeError."""
+    return _render(*_plan(cid, n, item, lanes))
 
 
 def cut_audio(cid: str, n: int) -> dict | None:
     """Return None only when no band is cut; otherwise return cut-aware URL and file.
     Unavailable cuts raise LookupError and encoding failures RuntimeError; never fall back to the full mix."""
-    v = _version_of(cid, n)
-    keep, cut = _cut_out(v)
+    _, cut = _cut_out(_lanes(_version_of(cid, n)) or [])
     if not cut:
         return None
-    path = mix_file(cid, n)
-    _, _, key = _mix_plan(cid, n, keep)
-    return {"url": f"/api/cards/{cid}/mix?version={n}&cut={','.join(cut)}&k={key}", "path": path}
+    files, key = _plan(cid, n)
+    return {"url": f"/api/cards/{cid}/mix?version={n}&cut={','.join(cut)}&k={key}", "path": _render(files, key)}
+
+
+def _item_arg() -> str | None:
+    item = request.args.get("item") or None
+    if item is not None and not (len(item) <= 32 and item.replace("_", "").isalnum()):
+        abort(400, description="item is a bundle item's name, e.g. comp1")
+    return item
 
 
 @bp.get("/api/cards/<cid>/mix")
 def cut_mix(cid):
-    """Use the folded cuts, not the URL's cut parameter, to produce a seekable response."""
+    """The sum of a version's lanes (an item's with `item=`): the ones named in `lanes=a,b`, else the kept ones
+    (a `cut=` only names the file). `from=S` streams it from S s at once and makes the whole file behind it. A
+    HEAD is 200 when the file is made, else 202, and starts making it. `X-Mix-Key` is the content key."""
     cid = by_ref(cid)
+    a = request.args
+    lanes = [x for x in a.get("lanes", "").split(",") if x] if "lanes" in a else None
     try:
-        out = mix_file(cid, request.args.get("version", type=int))
+        files, key = _plan(cid, a.get("version", type=int), _item_arg(), lanes)
     except LookupError as e:
         abort(404, description=str(e))
+    made = MIX_DIR / f"{key}.mp3"
+    at = a.get("from", type=float)
+    if (request.method == "HEAD" or at is not None) and not made.is_file():
+        _render_later(files, key)
+        if request.method == "HEAD":
+            return "", 202, {"X-Mix-Key": key, "Cache-Control": "no-store"}
+    if at is not None:
+        resp = Response(_stream(files, max(0.0, at), made if made.is_file() else None), mimetype="audio/mpeg")
+        resp.headers.update({"Cache-Control": "no-store", "X-Mix-Key": key})
+        return resp
+    try:
+        out = _render(files, key)
     except RuntimeError as e:
         abort(500, description=str(e))
     resp = send_file(out, mimetype="audio/mpeg", conditional=True)
     # Cache only URLs carrying the current content key; missing or stale keys require revalidation.
-    resp.headers["Cache-Control"] = ("public, max-age=86400" if request.args.get("k") == out.stem
-                                     else "no-cache")
+    resp.headers["Cache-Control"] = "public, max-age=86400" if a.get("k") == key else "no-cache"
+    resp.headers["X-Mix-Key"] = key
     return resp
+
+
+PEAKS_DIR = CONFIG.get().cache / "peaks"
+
+
+@bp.get("/api/cards/<cid>/peaks")
+def lane_peaks(cid):
+    """A lane's waveform in `n` columns (16–20000, default 2000), for a zoomed view: the card's 200 columns,
+    finer. Each byte is the column's peak against the lane's own (0–255), base64; made once per file and n."""
+    import base64
+    import numpy as np
+    cid = by_ref(cid)
+    a = request.args
+    n = max(16, min(20000, a.get("n", type=int) or 2000))
+    try:
+        lanes = _lanes(_version_of(cid, a.get("version", type=int)), _item_arg())
+    except LookupError as e:
+        abort(404, description=str(e))
+    p = next((x for x in lanes or [] if x.get("id") == a.get("lane")), None)
+    if p is None:
+        abort(404, description="no such lane")
+    f = ST.card_dir(_safe(cid)) / "media" / _safe(str(p["audio"]).split("/")[-1])
+    if not f.exists():
+        abort(404, description="the lane's audio is missing")
+    st, clip = f.stat(), p.get("time") or {}
+    key = hashlib.sha1(f"{f.resolve()}:{st.st_mtime_ns}:{st.st_size}:{n}:{clip.get('start')}:{clip.get('len')}"
+                       .encode()).hexdigest()[:20]
+    hit = PEAKS_DIR / f"{key}.json"
+    if hit.is_file():
+        body = hit.read_text()
+    else:
+        rate = 8000
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(f), "-ac", "1", "-ar", str(rate),
+                              "-f", "s16le", "-"], capture_output=True, timeout=60).stdout
+        x = np.abs(np.frombuffer(raw[: len(raw) // 2 * 2], dtype=np.int16).astype(np.int32))
+        # a lane rendered on the card's timeline (silent until its start) is drawn over its own window
+        if clip.get("start") and clip.get("len") and abs(len(x) / rate - clip["start"] - clip["len"]) < 1.0:
+            x = x[int(clip["start"] * rate):]
+        if not len(x):
+            abort(404, description="the lane's audio is empty")
+        cols = np.maximum.reduceat(x, np.linspace(0, len(x), n, endpoint=False).astype(int))
+        pk = (cols * 255 // (int(cols.max()) or 1)).astype(np.uint8).tobytes()
+        body = json.dumps({"lane": p["id"], "n": n, "secs": round(len(x) / rate, 3),
+                           "peaks": base64.b64encode(pk).decode()})
+        PEAKS_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = hit.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_text(body)
+        os.replace(tmp, hit)
+    resp = Response(body, mimetype="application/json")
+    resp.set_etag(key)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp.make_conditional(request)
 
 
 @bp.get("/media/<cid>/<name>")
