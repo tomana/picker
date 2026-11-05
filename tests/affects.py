@@ -22,6 +22,9 @@ NAMED = {                       # a page file → the checks that are about it
     "static/app/style.css": ["fx05", "t01", "t26"],
     "static/app/data.js": ["fx01", "fx06", "t01", "t30"],
     "static/band.js": ["t01"],
+    "static/app/player/view.js": ["fx41"],
+    "static/app/player/engine.js": ["fx41"],
+    "static/app/player/state.js": ["fx41"],
 }
 SKIP = re.compile(r"^(docs/|README|LICENSE|\.gitignore)")
 PY_ALL = "PY"                   # the whole Python suite
@@ -65,6 +68,8 @@ def affects(paths: list[str]) -> tuple[set[str], set[str], list[str]]:
         p = Path(f)
         if re.match(r"tests/(fx|t)\d.*\.mjs$", f):
             web.add(p.name.split("-")[0])
+        elif f.startswith("tests/unit/"):
+            continue                   # quick.sh runs them with node --test
         elif f.startswith("tests/py/") and f.endswith(".py"):
             py.add(PY_ALL)
         elif f.endswith(".py") and (f.startswith(("core/", "api/")) or f == "server.py"):

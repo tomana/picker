@@ -15,6 +15,7 @@ import { walk, stop as stopWalk, walking, present, CARD_STEPS } from "./parts/wa
 import { mountAudit } from "./parts/audit.js";
 import { sessionPct } from "./data.js";
 import { codeView } from "./parts/code.js";
+import { createPlayer, pausePlayer, playable } from "./player/view.js";
 
 const PART_BLOCKS = { voice: voiceBlock, node: nodeBlock };
 
@@ -1427,6 +1428,7 @@ export function build() {
   function stopAudio({ playlist: pl = true } = {}) {
     /* Invalidate callbacks before stopping the shared player and band decoders. */
     playGen++;
+    pausePlayer();
     rankStop();
     listen.byTurn = false;
     if (pl) for (const p of panels.values()) p.pause();
@@ -3385,6 +3387,7 @@ export function build() {
       if (listen.card) listen.card.at = null;
       stopAudio();
     }
+    if (kind === "big") pausePlayer();
 
     if (kind === "big") bandGen++;
 
@@ -3833,6 +3836,7 @@ export function build() {
     addEventListener("scroll", closeAgentMenu, true);
   }
 
+  let openNp = null;
   function openWhole(c, d, spawn, startAt = null) {
 
     const isRec = (c.origin || {}).kind === "recording";
@@ -4057,7 +4061,10 @@ export function build() {
         return;
       }
       paintCropBtn();
+      paintNpBtn();
       if (cropping && cropMedia()) return;
+      if (npWanted() && npHere()) { showNew(); return; }
+      if (openNp) { openNp.destroy(); openNp = null; }
       if (typeof v === "boolean") showVideo = v;
       const vs = viewsOf(sel);
       if (vs.length < 2) view = null;
@@ -4124,6 +4131,44 @@ export function build() {
       mediaBox.addEventListener("pointercancel", () => { sx = null; });
     }
     const foot = el("div.cfoot");
+
+    // the new lane player, beside the current one until the swap: a switch in the tools, remembered on this device
+    const npWanted = () => { try { return localStorage.getItem("picker.player") === "new"; } catch (_) { return false; } };
+    const npWhere = () => {
+      const v = (c.versions || [])[sel] || {}, it = itemAt(sel);
+      return { n: v.n ?? sel + 1, item: it ? it.id : null };
+    };
+    const npHere = () => !isRec && playable(c, npWhere().n, npWhere().item);
+    const npOps = {
+      signal: (body) => new Promise((ok) => writeSignal(c, d, body, () => ok(c), () => ok(null))),
+      claim: () => stopAudio(),
+      toast,
+      bar: () => [fullButton(c)],
+    };
+    if (openNp) { openNp.destroy(); openNp = null; }
+    const npBtn = el("button.npswitch", { type: "button", hidden: "" }, glyph("mixer", 18));
+    const paintNpBtn = () => {
+      npBtn.hidden = !npHere();
+      npBtn.classList.toggle("on", npWanted());
+      npBtn.title = npWanted() ? "back to the current player" : "try the new lane player";
+      npBtn.setAttribute("aria-label", npBtn.title);
+    };
+    npBtn.onclick = () => {
+      try { localStorage.setItem("picker.player", npWanted() ? "old" : "new"); } catch (_) {}
+      if (!npWanted() && openNp) { openNp.destroy(); openNp = null; }
+      else stopAudio();
+      paintMedia();
+    };
+    const showNew = () => {
+      const w = npWhere();
+      if (openNp) openNp.show(c, w);
+      else openNp = createPlayer(c, w, npOps, { resume });
+      if (openNp.el.parentNode !== mediaBox) mediaBox.replaceChildren(openNp.el);
+      paintItems();
+      paintHears();
+      resume = null;
+      viewRow.hidden = true;
+    };
 
     const setVote = (v) => {
       writeSignal(c, d, n > 1
@@ -4661,7 +4706,7 @@ export function build() {
       }, 300);
     };
 
-    tools.append(...[poolBtn, arch, dupBtn, splitBtn, cropBtn, dlBtn].filter(Boolean));
+    tools.append(...[poolBtn, arch, dupBtn, splitBtn, cropBtn, dlBtn, npBtn].filter(Boolean));
 
     const anyViews = Array.from({ length: n }, (_, i) => viewsOf(i).length > 1).some(Boolean);
     const anyItems = Array.from({ length: n }, (_, i) => itemsOf(i).length > 0).some(Boolean);

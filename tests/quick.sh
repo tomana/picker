@@ -15,6 +15,11 @@ if [ -n "$PYT" ]; then
   (cd "$HERE/.." && uv run --quiet --no-project --with "flask>=3.0" --with numpy --with pillow \
      python -m unittest discover -s tests/py 2>&1 | tail -3) || fail=1
 fi
+PATHS=$( [ $# -gt 0 ] && printf '%s\n' "$@" || { git -C "$HERE/.." diff --name-only HEAD; git -C "$HERE/.." ls-files --others --exclude-standard; } )
+if grep -qE '^(static/app/player/|tests/unit/)' <<< "$PATHS"; then
+  echo "== node: the unit tests"
+  node --test "$HERE"/unit/*.test.mjs 2>&1 | grep -E "^# (pass|fail)"; [ "${PIPESTATUS[0]}" = 0 ] || fail=1
+fi
 if [ -n "$WEB" ]; then
   echo "== browser: $WEB"
   "$HERE/move_check.sh" $WEB 2>&1 | grep -E "^(PASS|FAIL)|passed in|^ {8}" | grep -vE "^ {8}" ; [ "${PIPESTATUS[0]}" = 0 ] || fail=1
