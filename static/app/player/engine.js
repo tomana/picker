@@ -99,16 +99,17 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
       if (wait > 0.02) await new Promise((r) => setTimeout(r, wait * 1000));
       if (my !== gen) return;
       if (wait < -0.08 && got.seekable) n.el.currentTime = Math.max(0, now() + 0.03 - n.offset);   // late: catch up rather than repeat
-      try { await n.el.play(); } catch (e) { onError(e.message); return; }
-      const old = live;
-      live = n; next = old;
-      await Promise.all([ramp(n.el, 1, FADE_IN), ramp(old.el, 0, FADE_OUT)]);
-      old.el.pause();
-    } else {
-      const old = live;
-      live = n; next = old;
-      old.el.pause();
     }
+    // a pause during that wait or this play(): nothing is left sounding, the swap ends silent
+    if (playing) {
+      try { await n.el.play(); } catch (e) { if (my === gen) onError(e.message); return; }
+      if (my !== gen) { n.el.pause(); return; }
+    }
+    const old = live;
+    live = n; next = old;
+    if (playing) await Promise.all([ramp(n.el, 1, FADE_IN), ramp(old.el, 0, FADE_OUT)]);
+    else n.el.pause();
+    old.el.pause();
     next.key = null;
     if (my === gen) jumpTo = null;
     if (!got.made) watch(prog, my);
@@ -172,7 +173,7 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
       if (!live.key) return false;
       playing = true;
       live.el.volume = 0;
-      try { await live.el.play(); } catch (e) { playing = false; onError(e.message); return false; }
+      try { await live.el.play(); } catch (e) { if (playing) { playing = false; onError(e.message); } return false; }   // not playing: a pause cut it short
       if (playing) ramp(live.el, 1, FADE_IN);
       tick();
       return true;

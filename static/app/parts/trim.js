@@ -36,8 +36,13 @@ function pathOf(cols) {
   return d;
 }
 
+let current = null;                     // the stop of the editor that may be sounding
+
+/* The page's stop calls this: something else is about to play, or the card closed. */
+export function stopTrim() { if (current) current(); }
+
 export function trimEditor({ src, peaks, duration, trim, onSave = null, onChange = null, beat = 0, actions = [],
-                             whole = "the whole recording" }) {
+                             whole = "the whole recording", claim = null }) {
   const id = `trim${++_n}`;
   let dur = duration || 0;
   let a = trim ? trim.start : 0;
@@ -207,6 +212,7 @@ export function trimEditor({ src, peaks, duration, trim, onSave = null, onChange
   };
   const stop = () => {
     playing = false;
+    if (current === stop) current = null;
     cancelAnimationFrame(raf);
     audio.pause();
     paintPlay();
@@ -222,6 +228,8 @@ export function trimEditor({ src, peaks, duration, trim, onSave = null, onChange
     raf = requestAnimationFrame(tick);
   };
   const startAt = (t) => {
+    if (!playing && claim) claim();
+    current = stop;
     audio.currentTime = t;
     const p = audio.play();
     if (p && p.catch) p.catch(() => stop());

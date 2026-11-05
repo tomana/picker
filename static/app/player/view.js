@@ -23,7 +23,7 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
   kept.set(card.id, memo);
   const left = memo.left && memo.left.n === where.n && memo.left.item === where.item ? memo.left.s : 0;
   let P = initial(sourceOf(card, where.n, where.item), { muted: memo.muted, position: left });
-  let scrubAt = null, claiming = false;
+  let scrubAt = null, claiming = false, starting = 0;
   const engine = createEngine({
     onTick: (s) => place(s),
     onEnded: () => { dispatch({ type: "ended" }); },
@@ -86,8 +86,8 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
       r.mute.title = l.muted ? "unmute (only here, never sent)" : "mute (only here, never sent)";
       r.mute.classList.toggle("on", l.muted);
     }
-    playBtn.classList.toggle("on", engine.playing);
-    playBtn.title = engine.playing ? "pause" : "play";
+    playBtn.classList.toggle("on", P.playing);
+    playBtn.title = P.playing ? "pause" : "play";
     root.classList.toggle("playing", engine.playing);
     place(engine.playing ? engine.position : P.position);
   };
@@ -180,22 +180,24 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
       .then(() => paintState());
   };
 
-  /* The sound is readied first; whatever else plays goes on until this can start. */
+  /* The sound is readied first; whatever else plays goes on until this can start. A pause meanwhile calls it off. */
   async function start(at = null, { handover = false } = {}) {
     if (at != null) P = { ...P, position: at };
     const prog = program(P);
     if (!prog.url) { ops.toast("every lane is out or muted — nothing to play"); return; }
-    const t0 = performance.now();
+    const t0 = performance.now(), mine = ++starting;
+    const off = () => mine !== starting || !P.playing;
     current = api;
     P = { ...P, playing: true };
     paintState();
     await engine.load(prog, P.position);
-    if (!P.playing) return;
+    if (off()) return;
     claiming = true;
     try { ops.claim(); } finally { claiming = false; }
     const want = P.position + (handover ? (performance.now() - t0) / 1000 : 0);
     if (Math.abs(engine.position - want) > 0.05) await engine.seek(want);
-    await engine.play();
+    if (off()) return;
+    if (!await engine.play() && !off()) P = { ...P, playing: false };
     paintState();
   }
   const stop = () => {
@@ -206,7 +208,7 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
   };
 
   playBtn.onclick = () => {
-    if (!engine.playing) { start(); return; }
+    if (!P.playing) { start(); return; }
     memo.left = { n: P.n, item: P.item, s: stop() };
   };
 
@@ -378,8 +380,8 @@ export function createPlayer(card, where, ops, { resume = null } = {}) {
     show,
     get state() { return P; },
     get engine() { return engine; },
-    pause() { if (!claiming && engine.playing) stop(); },
-    destroy() { closeMenu(); ro.disconnect(); engine.stop(); if (current === api) current = null; },
+    pause() { if (!claiming && P.playing) stop(); },
+    destroy() { closeMenu(); ro.disconnect(); P = { ...P, playing: false }; engine.stop(); if (current === api) current = null; },
   };
   paintRows();
   if (resume && resume.from != null) start(resume.from, { handover: true });

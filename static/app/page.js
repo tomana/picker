@@ -4,7 +4,7 @@ import { el, usageBar, iconBtn, autoStrip, autoLine, poolHead, voteCells, listWh
          scrollIndicator, glyph, kindIcon, panelHead, RECORDING_YELLOW, playGlyphs, madeChips,
          infoBubble, closeBubble, dragScrollX } from "./dom.js";
 import { voiceBlock, waveSvg, stampLine, clock } from "./parts/voice.js";
-import { trimEditor } from "./parts/trim.js";
+import { trimEditor, stopTrim } from "./parts/trim.js";
 import { nodeBlock, paramPanel } from "./parts/node.js";
 import { abBlock, abFacts, abLength } from "./parts/ab.js";
 import { mountTimeline, tlAdopt, tlActive, renderTimeline, tlStop, tlSetOpen }
@@ -1292,6 +1292,7 @@ export function build() {
     /* Invalidate callbacks before stopping the shared player and band decoders. */
     playGen++;
     pausePlayer();
+    stopTrim();
     rankStop();
     listen.byTurn = false;
     if (pl) for (const p of panels.values()) p.pause();
@@ -3159,7 +3160,7 @@ export function build() {
       if (listen.card) listen.card.at = null;
       stopAudio();
     }
-    if (kind === "big") pausePlayer();
+    if (kind === "big") { pausePlayer(); stopTrim(); }
 
     if (kind === "big") listen.tick = null;
 
@@ -3817,7 +3818,7 @@ export function build() {
           const part = (ver.parts || [])[0] || {};
           trimEl = trimEditor({
             src: part.audio || (ver.media || {}).audio || (c.media || {}).audio,
-            peaks: part.peaks, duration: ver.duration, trim: c.trim,
+            peaks: part.peaks, duration: ver.duration, trim: c.trim, claim: () => stopAudio(),
             onSave: (t) => new Promise((ok, no) => {
               if (!d.signal) { c.trim = t; ok(); return; }
               d.signal(c.id, { kind: "trim", value: t })
@@ -4431,7 +4432,7 @@ export function build() {
       };
       mediaBox.replaceChildren(trimEditor({
         src: it.media.audio, peaks: it.peaks, duration: it.duration || ver.duration, trim: null,
-        beat: it.beat || 0, onChange: (t) => { span = t; }, actions: [go], whole: "the whole piece" }));
+        beat: it.beat || 0, onChange: (t) => { span = t; }, actions: [go], whole: "the whole piece", claim: () => stopAudio() }));
       paintItems();
       viewRow.hidden = true;
       paintHears();
