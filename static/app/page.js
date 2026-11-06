@@ -1985,7 +1985,8 @@ export function build() {
       el("div.lbl", {}, [
         el("div.ctitle.cref", { text: refOf(c, shown), title: c.label }),
         copyBtn(),
-      ]),
+        nv ? el("span.cver", { text: `v${c.versions[shown].n ?? shown + 1}` }) : null,
+      ].filter(Boolean)),
 
       voteCell("−", c.vote, setVote, shownVote()), voteCell("+", c.vote, setVote, shownVote()));
 

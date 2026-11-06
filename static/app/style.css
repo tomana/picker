@@ -737,6 +737,8 @@ body { background:var(--ground) }
 .cfoot > .lbl:has(> .ccopy) { gap:2px; padding-right:4px }
 
 .cfoot > .lbl > .ctitle.cref { flex:0 1 auto }
+.cver { flex:none; margin-left:auto; color:var(--mut);
+        font-family:ui-monospace,SFMono-Regular,Menlo,monospace }
 .grid .cfoot .vcell { min-width:24px; padding:0 4px }
 
 .tlwrap { grid-column:1 / -1;

@@ -1,5 +1,6 @@
 import { withPage, showTab, api, assert, eq, sleep } from "./lib.mjs";
-export const name = "small card — the copy icon copies its id; a version voted down steps aside";
+const SHOTS = process.env.SHOTS;
+export const name = "small card — its foot says which version is on show, the copy icon copies its id; a version voted down steps aside";
 const json = (body) => ({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 export async function run(log) {
   const cards = (await api("/api/cards?type=fx_visual")).cards;
@@ -11,6 +12,7 @@ export async function run(log) {
   const vs = c.versions;
   let back = vs.length - 2;
   while ((vs[back].vote || 0) < 0) back--;
+  const num = (i) => `v${vs[i].n ?? i + 1}`;
   await withPage(async (page, errs) => {
     const sent = [];
     page.on("request", async (r) => {
@@ -29,10 +31,19 @@ export async function run(log) {
     await showTab(page, "fx_visual");
     const foot = () => page.evaluate((id) => {
       const a = document.querySelector(`.grid article.card[data-cid="${id}"]`);
-      return a && { ref: a.querySelector(".cref").textContent, copy: !!a.querySelector(".cfoot .ccopy") };
+      return a && { ref: a.querySelector(".cref").textContent, copy: !!a.querySelector(".cfoot .ccopy"),
+                    ver: a.querySelector(".cfoot .cver")?.textContent };
     }, c.id);
     const before = await foot();
     assert(before && before.copy, `the small card has no copy icon: ${JSON.stringify(before)}`);
+    eq(before.ver, num(vs.length - 1), "the number on the foot: the newest version");
+    const step = async (dir) => {
+      await page.evaluate((id, dir) => document.querySelector(`.grid article.card[data-cid="${id}"] .vnav.${dir}`).click(), c.id, dir);
+      return (await foot()).ver;
+    };
+    eq(await step("prev"), num(vs.length - 2), "‹ steps the number with the picture");
+    eq(await step("next"), num(vs.length - 1), "› steps it back");
+    log(`the foot says ${before.ver}, ‹ ${num(vs.length - 2)}, › ${before.ver}`);
     await page.evaluate(() => { navigator.clipboard.writeText = async (t) => { window.__copied = t; }; });
     await page.evaluate((id) => {
       const a = document.querySelector(`.grid article.card[data-cid="${id}"]`);
@@ -54,7 +65,19 @@ export async function run(log) {
     assert(sent.some((s) => s.includes('"kind":"vote"') && s.includes('"value":-1')),
            `no −1 vote was sent: ${sent.join(" | ")}`);
     assert(after.ref !== before.ref, `the voted-down version stayed on show: ${after.ref}`);
-    log(`− on ${before.ref}: the card now shows ${after.ref} (v${vs[back].n ?? back + 1}), without a reload`);
+    eq(after.ver, num(back), "the number follows the version that stepped in");
+    log(`− on ${before.ref}: the card now shows ${after.ref} (${after.ver}), without a reload`);
+    // two columns on a phone: every number whole, between the id and the − +
+    await page.setViewport({ width: 360, height: 800, deviceScaleFactor: 2 });
+    await sleep(500);
+    const bad = await page.$$eval(".grid article.card .cfoot", (fs) => fs.filter((f) => {
+      const v = f.querySelector(".cver");
+      if (!v) return false;
+      const r = v.getBoundingClientRect(), id = f.querySelector(".ccopy").getBoundingClientRect(), vote = f.querySelector(".vcell").getBoundingClientRect();
+      return r.left < id.right || r.right > vote.left || v.scrollWidth > Math.ceil(r.width);
+    }).map((f) => f.textContent));
+    eq(bad.join(" | "), "", "a number cut or in the way at 360 px");
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/small-card-version.png` });
     assert(!errs.length, "page errors: " + errs.slice(0, 3).join(" | "));
   });
 }
