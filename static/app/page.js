@@ -1031,6 +1031,13 @@ export function build() {
     return `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, "0")}`;
   };
 
+  const HUE = { claude: "ant", fable: "ant", codex: "oai",
+                antigravity: "goog", agy: "goog", gemini: "goog" };
+  // a line's agent names in their colours; lower case and whole, so a model's name ("Claude Opus", gemini-3-flash) stays plain
+  const AGENT_WORD = new RegExp(`(?<![\\w-])(${Object.keys(HUE).join("|")})(?![\\w-])`, "g");
+  const agentWords = (text) => text.split(AGENT_WORD)
+    .map((s, i) => (i % 2 ? el("span", { text: s, style: `color:var(--${HUE[s]}-text)` }) : s));
+
   // agents' short words and models' labels, as the agent menus show them: fetched once, the queue repainted when in
   const runWords = { agents: null, repaint: null };
   function runText(run) {
@@ -1059,9 +1066,9 @@ export function build() {
     const tries = q.attempts > 1 ? `try ${q.attempts}` : null;
     const beat = run
 
-      ? [el("i.qdot"), el("span", { text:
+      ? [el("i.qdot"), el("span", {}, agentWords(
           [q.phase, mmss(Date.now() / 1000 - (q.started || q.created || 0)), tries]
-            .filter(Boolean).join(" · ") })]
+            .filter(Boolean).join(" · ")))]
       : held
 
         ? [el("span", { text: ["paused", q.paused_from === "running" ? "starts over on ▶" : null]
@@ -1090,9 +1097,9 @@ export function build() {
         el("div.qtitle", {}, title),
         el("div.qbeat" + (run ? ".run" : ""), {}, beat),
 
-        q.run ? el("div.qrun", { text: runText(q.run), title: q.run.planned
+        q.run ? el("div.qrun", { title: q.run.planned
           ? "what this job will run with (its agent's ⚙ setting now)"
-          : "what this job's agent started with" }) : null,
+          : "what this job's agent started with" }, agentWords(runText(q.run))) : null,
       ].filter(Boolean)),
     ]);
 
@@ -3389,8 +3396,8 @@ export function build() {
       stat.className = `qjstat ${iss.level || j.status}`;
       stat.replaceChildren(...[
         el("div.qjline", {}, [j.status === "running" ? el("i.qdot") : null,
-                              el("span", { text: line.filter(Boolean).join(" · ") })].filter(Boolean)),
-        j.run ? el("div.qjrun", { text: runText(j.run) }) : null,
+                              el("span", {}, agentWords(line.filter(Boolean).join(" · ")))].filter(Boolean)),
+        j.run ? el("div.qjrun", {}, agentWords(runText(j.run))) : null,
         iss.detail ? el("div.qhd", { text: iss.detail }) : null,
         iss.fix ? el("div.qhf", { text: `→ ${iss.fix}` }) : null,
       ].filter(Boolean));
@@ -4015,9 +4022,6 @@ export function build() {
     audit.onclick = () => openAudit(c);
 
     const nar = c.narrative || {};
-
-    const HUE = { claude: "ant", fable: "ant", codex: "oai",
-                  antigravity: "goog", agy: "goog", gemini: "goog" };
 
     const makeOrig = (sp) => {
 
