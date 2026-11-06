@@ -16,6 +16,7 @@ import { mountAudit } from "./parts/audit.js";
 import { sessionPct } from "./data.js";
 import { codeView } from "./parts/code.js";
 import { createPlayer, pausePlayer, lanesOf } from "./player/view.js";
+import { ramp, FADE_OUT, FADE_IN } from "./player/engine.js";
 
 const PART_BLOCKS = { voice: voiceBlock, node: nodeBlock };
 
@@ -1307,7 +1308,7 @@ export function build() {
     listen.ver = null;
     listen.seg = null;
 
-    for (const e of document.querySelectorAll(".vline")) e.remove();
+    for (const e of document.querySelectorAll(".vline:not(.held)")) e.remove();
     for (const e of document.querySelectorAll(".vplay.on, .abplay.on")) e.classList.remove("on");
 
     for (const e of document.querySelectorAll(".origpb.on")) e.classList.remove("on");
@@ -1435,7 +1436,7 @@ export function build() {
   function lineIn(box) {
     const put = (at) => {
       const m = (box && box.isConnected) ? box
-              : document.querySelector(".sheet.big .vblock");
+              : document.querySelector(".sheet.big .vblock:not(.origbar *)");
       if (!m) return;
       let line = m.querySelector(".vline");
       if (!line) { line = el("i.vline"); m.append(line); }
@@ -1454,6 +1455,7 @@ export function build() {
     stopAudio();
     if (!url) { if (done) done(); return; }
     const a = player.get();
+    ramp(a, 1, 1);                    // the original's head may have left it silent
 
     const gen = ++playGen;
     /* The audio element is reused; callbacks must belong to this play generation. */
@@ -4049,23 +4051,84 @@ export function build() {
       const pb = el("button.origpb", { type: "button", "aria-label": "play the original",
                                        title: "play the original — the stretch this was made from" },
                     playGlyphs(16));
-      const stop = () => { pb.classList.remove("on"); delete pb.dataset.at; };
+      /* The head stays where the sound or a finger left it, and ▶ goes on from there. Played from before the stretch's
+         end it stops there, from after it plays to the file's end. Moving it is silent, as in the lane player. */
+      const line = lineIn(blk), start = has ? sp.start : 0, stretchEnd = has ? sp.start + sp.dur : null;
+      const put = (f) => { line(f); blk.querySelector(".vline").classList.toggle("r", f > 0.55); };   // its time stays on the bar
+      const sounding = () => pb.classList.contains("on");
+      let at = start, stopAt = null, moving = false, lands = 0;
+      const aim = () => { stopAt = stretchEnd != null && at < stretchEnd ? stretchEnd : null; };
+      const stamp = (on) => { if (!dur) return; if (on) blk.dataset.dur = dur; else delete blk.dataset.dur; };  // no time over the label at rest
+      const rest = () => { at = start; stamp(false); if (dur && blk.isConnected) put(at / dur); };
+      const tick = (f) => {
+        if (moving) return;
+        at = player.el.currentTime;
+        put(f);
+        if (stopAt != null && at >= stopAt) { pc.at = null; stopAudio(); rest(); }
+      };
       pb.onclick = (e) => {
         e.stopPropagation();
-
-        if (pb.classList.contains("on")) {
-          const at = listen.el === player.el && player.el ? player.el.currentTime : 0;
-          stopAudio(); pb.classList.remove("on");
-          if (at > 0) pb.dataset.at = String(at);
-          return;
-        }
-        const at = Number(pb.dataset.at) || 0;
-        delete pb.dataset.at;
-        play(pc, recAudio, { tick: lineIn(blk), done: stop,
-                             ...(has ? { from: Math.max(sp.start, at), to: sp.start + sp.dur }
-                                     : at ? { from: at } : {}) });
+        if (sounding()) { stopAudio(); return; }
+        aim();
+        stamp(true);
+        play(pc, recAudio, { tick, done: rest, from: at });
         pb.classList.add("on");
       };
+      const land = async (f) => {
+        const my = ++lands;
+        moving = true;
+        at = f * dur;
+        aim();
+        put(f);
+        if (sounding()) {
+          const a = player.el;
+          await ramp(a, 0, FADE_OUT);
+          if (my === lands && sounding()) {
+            const sought = new Promise((ok) => { a.addEventListener("seeked", ok, { once: true }); setTimeout(ok, 2000); });
+            a.currentTime = at;
+            await sought;
+            if (my === lands && sounding()) ramp(a, 1, FADE_IN);
+          }
+        }
+        if (my === lands) moving = false;
+      };
+      const bar = el("div.origbar", {}, [blk]);
+      if (dur) {
+        blk.append(el("i.vline.held", { style: `left:${(start / dur * 100).toFixed(2)}%` }));
+        bar.title = "tap or drag: move the playhead";
+        const fracAt = (x) => { const g = laneBox(blk); return g && Math.max(0, Math.min(1, (x - g.left) / g.width)); };   // none: the sheet shut
+        let id = null, x0 = 0, y0 = 0, dragged = false, last = null;
+        bar.addEventListener("pointerdown", (e) => {
+          if (e.button) return;
+          id = e.pointerId; x0 = e.clientX; y0 = e.clientY; dragged = false; last = null;
+        });
+        bar.addEventListener("pointermove", (e) => {
+          if (e.pointerId !== id) return;
+          if (!dragged) {
+            const dx = Math.abs(e.clientX - x0), dy = Math.abs(e.clientY - y0);
+            if (dx < 6 && dy < 6) return;
+            if (e.pointerType === "touch" && dy >= dx) { id = null; return; }    // the sheet scrolls
+            dragged = moving = true;
+            lands++;
+            stamp(true);
+            try { bar.setPointerCapture(id); } catch (_) {}
+            if (sounding()) ramp(player.el, 0, FADE_OUT);
+          }
+          e.preventDefault();
+          last = fracAt(e.clientX);
+          if (last != null) put(last);
+        });
+        const end = (e, cancelled) => {
+          if (e.pointerId !== id) return;
+          id = null;
+          const f = cancelled ? last : fracAt(e.clientX);
+          if (f == null) { if (dragged) moving = false; return; }
+          stamp(true);
+          land(f);
+        };
+        bar.addEventListener("pointerup", (e) => end(e, false));
+        bar.addEventListener("pointercancel", (e) => end(e, true));
+      }
       const go = el("button.origgo", { type: "button", "aria-label": "open the original recording",
                                        title: "open the original recording" }, [glyph("open", 18)]);
       go.onclick = (e) => {
@@ -4073,7 +4136,7 @@ export function build() {
         closeSheet("big");
         requestAnimationFrame(() => openCard(pc, d, spawn));
       };
-      return el("div.origrow", {}, [pb, el("div.origbar", {}, [blk]),
+      return el("div.origrow", {}, [pb, bar,
         has ? el("span.origat", { text: `${t(sp.start)}–${t(sp.start + sp.dur)}` }) : null, go].filter(Boolean));
     };
     let origRow = null, origKey;

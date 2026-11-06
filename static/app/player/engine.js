@@ -4,8 +4,23 @@
    (`from=`) while it makes the file, and the engine moves onto the file once it exists.
    A jump or a stop on a sounding waveform is a click, so nothing seeks or pauses until its element is silent. */
 
-const FADE_OUT = 45, FADE_IN = 60;       // ms: too fast to hear as a fade, too slow to be a step
+export const FADE_OUT = 45, FADE_IN = 60;       // ms: too fast to hear as a fade, too slow to be a step
 const POLL = 1000;                       // ms between asks whether a streamed sum's file is made
+
+const fades = new WeakMap();             // a new ramp on an element takes over from the one running
+export const ramp = (el, to, ms) => new Promise((done) => {
+  const id = (fades.get(el) || 0) + 1;
+  fades.set(el, id);
+  const from = el.volume, t0 = performance.now();
+  if (from === to) { done(); return; }
+  const step = () => {
+    if (fades.get(el) !== id) { done(); return; }
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    try { el.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch (_) {}
+    if (k < 1) setTimeout(step, 8); else done();
+  };
+  step();
+});
 
 export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = () => {} } = {}) {
   const make = () => {
@@ -18,21 +33,6 @@ export function createEngine({ onTick = () => {}, onEnded = () => {}, onError = 
   let jumpTo = null;                     // a seek: where it is going, until it is there
 
   const now = () => (jumpTo != null ? jumpTo : live.key ? live.offset + (live.el.currentTime || 0) : pos);
-
-  const fades = new WeakMap();           // a new ramp on an element takes over from the one running
-  const ramp = (el, to, ms) => new Promise((done) => {
-    const id = (fades.get(el) || 0) + 1;
-    fades.set(el, id);
-    const from = el.volume, t0 = performance.now();
-    if (from === to) { done(); return; }
-    const step = () => {
-      if (fades.get(el) !== id) { done(); return; }
-      const k = Math.min(1, (performance.now() - t0) / ms);
-      try { el.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch (_) {}
-      if (k < 1) setTimeout(step, 8); else done();
-    };
-    step();
-  });
 
   const once = (el, names, ms = 8000) => new Promise((ok, no) => {
     const off = () => { for (const n of names) el.removeEventListener(n, hit); el.removeEventListener("error", bad); clearTimeout(t); };
