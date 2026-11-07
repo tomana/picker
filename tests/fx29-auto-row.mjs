@@ -35,7 +35,8 @@ export async function run(log) {
                cut: run ? run.scrollHeight > run.clientHeight + 1 || run.scrollWidth > run.clientWidth + 1 : null };
     }));
     const ref = await page.evaluate((id) => document.querySelector(`.grid article.card[data-cid="${id}"] .cref`)?.textContent, card.id);
-    const want = pre && ref && ref.startsWith(`${pre}:`) ? `AUTO · ${ref}` : `AUTO · ${tab} · ${ref || card.id}`;
+    const name = ref && ref.replace(/:v\d+$/, "");                // the card's title has the version, the row its card
+    const want = pre && name && name.startsWith(`${pre}:`) ? `AUTO · ${name}` : `AUTO · ${tab} · ${name || card.id}`;
     assert(rows[0].title.endsWith(want), `the running row names its card (with the tab's prefix) or the tab and card: ${rows[0].title}, want ${want}`);
     assert(rows[1].title.endsWith(`AUTO · ${tab}`), `a row with no card yet names the tab: ${rows[1].title}`);
     eq(rows[0].run, `${a.cli} · ${model.label} · xhigh effort`, "the run line in the menus' words, with the effort");

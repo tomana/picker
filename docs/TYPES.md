@@ -34,8 +34,8 @@ there is no live compatibility layer.
 | `sync` | | `{"argv": ["{python}", "sync.py"], "cwd": "."}`: its sync script; absent: the runner writes its cards itself |
 | `plugin` | | its plugin module (below) |
 | `lanes` | | `"by_agent"`: a runner per agent, so jobs for different agents do not block each other; absent: one job at a time |
-| `methods`, `default_method` | | the ways a job can be done (for example, `bundle`): `{id, label, about}` each; a send uses the default. One method may be the type's **tuning** (`"tuning": true`, or `"items"`: only on a version that has items): small measured moves on the finished card, its source kept beside the result. It gets a button beside revise on the open card (the same words and ×N) and a kind in AUTO beside revise and inspire; either queues a revise by that method |
-| `name_prefix` | | its cards' short names are shown as `<prefix>:<name>` (for example, `m:loop1`) and work wherever an id does |
+| `methods`, `default_method` | | the ways a job can be done (for example, `bundle`): `{id, label, about}` each; a send uses the default. One method may be the type's **tuning** (`"tuning": true`, or `"items"`: only on a version that has items): small measured moves on the finished card, each a new version of it. It gets a button beside revise on the open card (the same words and ×N) and a kind in AUTO beside revise and inspire; either queues a revise by that method |
+| `name_prefix` | | its cards' short names are shown as `<prefix>:<name>`, a card's title with the version on show (`m:loop1:v3`), and work wherever an id does, with or without the version |
 | `survey_tools` | | commands AUTO's survey agent may run (for example, timing tools) |
 | `capabilities` | | what its cards can do in the page (below) |
 | `auto_placeholder` | | copy for `auto: "placeholder"`: `{title, summary, description, tooltip}` for the sheet heading, panel line, sheet body and panel hover text; omitted fields use generic defaults |

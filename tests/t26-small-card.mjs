@@ -78,6 +78,23 @@ export async function run(log) {
     }).map((f) => f.textContent));
     eq(bad.join(" | "), "", "a number cut or in the way at 360 px");
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/small-card-version.png` });
+    // a tab that names its cards: the version in the title, nothing beside it, whole at 360 px
+    await showTab(page, "fx_music");
+    await sleep(500);
+    const named = await page.$$eval(".grid article.card .cfoot", (fs) => fs.map((f) => {
+      const t = f.querySelector(".cref"), v = f.querySelector(".crefv");
+      return { text: t.textContent, beside: !!f.querySelector(".cver"),
+               whole: !!v && v.getBoundingClientRect().right <= f.querySelector(".ccopy").getBoundingClientRect().left + 1 };
+    }).filter((n) => n.text.startsWith("m:")));
+    assert(named.length, "no named cards on fx_music");
+    eq(named.filter((n) => !/^m:[^:]+:v\d+$/.test(n.text) || n.beside || !n.whole).map((n) => n.text).join(" | "), "",
+       "a named card's title without its version, or the version cut, at 360 px");
+    log(`named: ${named.slice(0, 3).map((n) => n.text).join(", ")}`);
+    if (SHOTS) {
+      await page.evaluate(() => document.querySelector(".grid article.card .cfoot").scrollIntoView({ block: "center" }));
+      await sleep(300);
+      await page.screenshot({ path: `${SHOTS}/small-card-named.png` });
+    }
     assert(!errs.length, "page errors: " + errs.slice(0, 3).join(" | "));
   });
 }

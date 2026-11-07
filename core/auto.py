@@ -250,7 +250,7 @@ def _lead(type_: str, kind: str) -> str:
     fn = PG.call(type_, "auto_text")
     got = fn(kind) if fn is not None else None
     return got or TEXT.get(kind) or (f"Auto {kind} — the operator is not watching this one. Tune the card: small, "
-                                     f"measured moves on the finished thing, its source kept beside the tuning.")
+                                     f"measured moves on the finished thing, as a new version.")
 
 
 _ticking = threading.Lock()

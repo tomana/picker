@@ -446,11 +446,13 @@ def _moved(t: str, tok: str) -> set | None:
 
 
 def by_ref(cid: str) -> str:
-    """Resolve an id or manifest-prefixed short name; return 404 when neither identifies a card."""
+    """Resolve an id or manifest-prefixed short name; return 404 when neither identifies a card. The name may carry
+    what a card's title and id line add after it (m:loop1:v3, m:loop1:bass:v3)."""
     for t in CONFIG.types():
         p = t.get("name_prefix")
         if p and cid.startswith(p + ":"):
-            return by_name(cid[len(p) + 1:], t["type"]) or abort(404, description=f"no card named {cid}")
+            name = cid[len(p) + 1:].split(":")[0]
+            return by_name(name, t["type"]) or abort(404, description=f"no card named {cid}")
     return cid
 
 

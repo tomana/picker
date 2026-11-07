@@ -727,6 +727,9 @@ body { background:var(--ground) }
           white-space:nowrap }
 
 .ctitle.cref { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.01em }
+.ctitle.cnamed { display:flex }          /* a long name gives way before its version */
+.crefn { min-width:0; overflow:hidden; text-overflow:ellipsis }
+.crefv { flex:none }
 
 .ccopy { flex:none; display:inline-flex; align-items:center; justify-content:center;
          padding:4px 3px; margin:-4px 0 -4px -3px; border:0; background:none; cursor:pointer;

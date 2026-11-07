@@ -753,7 +753,7 @@ export function build() {
     const slotOf = (c) => {
       let ph = slotFor.get(c);
       if (!ph) {
-        ph = el("div.cardwrap.cardph", { "data-cid": c.id }, [el("span.phname", { text: refOf(c, shownAt(c)) })]);
+        ph = el("div.cardwrap.cardph", { "data-cid": c.id }, [el("span.phname", { text: titleOf(c, shownAt(c)) })]);
         slotCard.set(ph, c);
         slotFor.set(c, ph);
       }
@@ -1818,6 +1818,12 @@ export function build() {
     return part && part !== c.id ? part : c.id;
   }
 
+  /* A card's name with the version in it, on a tab that names its cards: h:name:v3. */
+  function titleOf(c, i) {
+    const ref = refOf(c, i), v = (c.versions || [])[i];
+    return v && namePrefix(c.type) && c.name && ref === `${namePrefix(c.type)}:${c.name}` ? `${ref}:v${v.n ?? i + 1}` : ref;
+  }
+
   function nameFor(d, c) {
     const id = typeof c === "string" ? c : c && c.id;
     const fc = (d.cards || []).find((x) => x.id === id) || (typeof c === "object" ? c : null);
@@ -1973,7 +1979,7 @@ export function build() {
         settle();
 
         if (ver != null && (c.vote || 0) === was)
-          toast(`${refOf(c, shown)}: ${v > 0 ? "+" : ""}${v} · stack ${was > 0 ? "+" : ""}${was}`);
+          toast(`${titleOf(c, shown)}: ${v > 0 ? "+" : ""}${v} · stack ${was > 0 ? "+" : ""}${was}`);
       });
     };
     const footEl = el("div.cfoot");
@@ -1983,18 +1989,24 @@ export function build() {
                                               "aria-label": "copy the name" }, glyph("copy", 11));
       b.onclick = async (ev) => {
         ev.stopPropagation();
-        const ref = refOf(c, shown);
+        const ref = titleOf(c, shown);
         try { await navigator.clipboard.writeText(ref); toast(`copied ${ref}`); }
         catch (_) { toast(ref); }
       };
       return b;
     };
+    const footTitle = () => {
+      const name = refOf(c, shown), whole = titleOf(c, shown);
+      return whole === name ? el("div.ctitle.cref", { text: name, title: c.label })
+        : el("div.ctitle.cref.cnamed", { title: c.label }, [el("span.crefn", { text: name }),
+                                                            el("span.crefv", { text: whole.slice(name.length) })]);
+    };
     const footPaint = () => footEl.replaceChildren(
 
       el("div.lbl", {}, [
-        el("div.ctitle.cref", { text: refOf(c, shown), title: c.label }),
+        footTitle(),
         copyBtn(),
-        nv ? el("span.cver", { text: `v${c.versions[shown].n ?? shown + 1}` }) : null,
+        nv && titleOf(c, shown) === refOf(c, shown) ? el("span.cver", { text: `v${c.versions[shown].n ?? shown + 1}` }) : null,
       ].filter(Boolean)),
 
       voteCell("−", c.vote, setVote, shownVote()), voteCell("+", c.vote, setVote, shownVote()));
@@ -2340,7 +2352,7 @@ export function build() {
         (c0 ? `the next in the order for «${c0}»` : "picked at random") +
         ", at its newest version not voted down";
       const made = (k) => (k === "revise" ? "to make its next version" : k === "inspire" ? "to make a new card from it"
-        : "to tune it: a new version, its source kept beside the tuning");
+        : "to tune it: a new version");
       const said = (k) => (lead[k] ? `, with AUTO's words: "${lead[k]}"` : "");
       const sent = (k) => (k === "revise" || k === "inspire" ? { kind: k } : { kind: "revise", method: k });
       for (const k of ks) if (!(`${a}|${k}` in guides))
@@ -4033,7 +4045,7 @@ export function build() {
       if (fi && (fi.media || {}).audio) {
         pc = fc; pv = { duration: fi.duration, media: fi.media };
         rp = { id: fi.id, audio: fi.media.audio, peaks: fi.peaks };
-        name = `${fc.name && namePrefix(fc.type) ? `${namePrefix(fc.type)}:${fc.name}` : fc.id}:${fi.id}:v${fv.n}`;
+        name = `${fc.name && namePrefix(fc.type) ? `${namePrefix(fc.type)}:${fc.name}` : fc.id}${fi.id === fv.face_item ? "" : `:${fi.id}`}:v${fv.n}`;
         sp = null;
       }
       for (let id = (c.lineage || {}).parent, k = 0; !pc && id && k < 6; k++) {
@@ -4185,7 +4197,8 @@ export function build() {
       const it = itemAt(sel);
       const diff = it && it.diff ? el("pre.cddiff", { text: it.diff }) : null;
 
-      const ref = (it ? `${refOf(c, sel)}:${it.id}` : refOf(c, sel)) + vk;
+      // the version's face goes without saying: h:name:v3; another item says so: h:name:bass:v3
+      const ref = (it && !(vk && it.id === vv.face_item) ? `${refOf(c, sel)}:${it.id}` : refOf(c, sel)) + vk;
 
       const ids = el("span.cdid", { role: "button", tabindex: "0", title: `tap to copy ${ref}`,
                                     text: ref });

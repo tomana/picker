@@ -59,6 +59,13 @@ class Asks(unittest.TestCase):
         self.assertNotIn("asked", vs[3], "an unknown job leaves the card's lineage to answer")
         self.assertNotIn("asked", vs[4])
 
+    def test_a_name_finds_its_card_with_what_its_title_adds(self):
+        # the tile's title and the open card's id line copy m:asktest:v3 and m:asktest:bass:v3
+        for ref in ("m:asktest", "m:asktest:v3", "m:asktest:bass:v3"):
+            r = self.app.test_client().get(f"/api/cards/{ref}")
+            self.assertEqual((r.status_code, (r.get_json() or {}).get("id")), (200, "asktest01"), ref)
+        self.assertEqual(self.app.test_client().get("/api/cards/m:nothere:v3").status_code, 404)
+
     def test_the_cached_card_learns_nothing(self):
         self.app.test_client().get("/api/cards/asktest01")
         self.assertNotIn("asked", self.C.read_card("asktest01", detail=True)["versions"][1])
