@@ -145,13 +145,13 @@ export function cardMedia(c, { w = 360 } = {}) {
 
   const m = c.media || {};
   /* Still-only media is valid even without an animation or video. */
-  if (!m.gif && !m.poster && !m.video && !m.still) {
+  if (!m.gif && !m.loop && !m.poster && !m.video && !m.still) {
     /* Missing pictures do not imply audio; absent media stays empty. */
 
     return el("div.media.none", {
       style: "position:relative;aspect-ratio:1;background:#000000" });
   }
-  if (m.poster || m.video) {
+  if (!m.loop && (m.poster || m.video)) {
     const box = el("div.media.video", {
       style: "position:relative;aspect-ratio:1;background:#000000" });
 
@@ -166,7 +166,10 @@ export function cardMedia(c, { w = 360 } = {}) {
     style: "position:relative;aspect-ratio:1;background:#000000" });
   box.append(el("img.still", { src: thumb(m.still, w) || m.gif, alt: c.id,
     style: "width:100%;height:100%;object-fit:cover;display:block" }));
-  if (m.gif && m.still) {
+  if (m.loop) {
+    box.append(el("video.anim", { "aria-hidden": "true", "data-loop": m.loop, muted: "", loop: "", playsinline: "",
+                                  preload: "none" }));
+  } else if (m.gif && m.still) {
     box.append(el("img.anim", { alt: "", "aria-hidden": "true", "data-gif": m.gif }));
   }
   return box;

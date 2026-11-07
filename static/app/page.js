@@ -143,10 +143,33 @@ export function build() {
     return b ? b.dataset.audio : null;
   }
 
+  const ANIM = "img.anim[data-gif], video.anim[data-loop]";
   function animOf(x) {
     if (!x) return null;
-    if (x.matches && x.matches("img.anim[data-gif]")) return x;
-    return x.querySelector ? x.querySelector("img.anim[data-gif]") : null;
+    if (x.matches && x.matches(ANIM)) return x;
+    return x.querySelector ? x.querySelector(ANIM) : null;
+  }
+
+  // a loop (media.loop) plays as a gif does, muted; the speaker gives every loop its sound until it is pressed again or
+  // another sound starts
+  const loops = { sound: false };
+  function loopSound(on) {
+    if (on) stopAudio();                 // one sound at a time; stopAudio mutes the loops, so it goes first
+    loops.sound = on;
+    for (const v of document.querySelectorAll("video.anim[data-loop]")) v.muted = !on;
+    for (const b of document.querySelectorAll(".lsound")) paintLoopSound(b);
+  }
+  function paintLoopSound(b) {
+    b.replaceChildren(glyph(loops.sound ? "speaker" : "speakermute", 18));
+    b.title = loops.sound ? "mute" : "sound on";
+    b.setAttribute("aria-label", b.title);
+    b.classList.toggle("on", loops.sound);
+  }
+  function loopSoundBtn() {
+    const b = el("button.lsound.no-swipe", { type: "button" });
+    paintLoopSound(b);
+    b.onclick = (e) => { e.stopPropagation(); loopSound(!loops.sound); };
+    return b;
   }
 
   function gifPlay(card) {
@@ -171,8 +194,19 @@ export function build() {
     if (img.dataset.playing) return;
     const token = String(++gifSeq);
     img.dataset.playing = token;
-    img.src = img.dataset.gif;
     const show = () => { if (img.dataset.playing === token) img.classList.add("on"); };
+    if (img.tagName === "VIDEO") {
+      img.muted = !loops.sound;
+      img.addEventListener("playing", show, { once: true });
+      img.src = img.dataset.loop;
+      img.play().catch(() => {           // the browser refused its sound: muted, it starts
+        if (img.dataset.playing !== token || img.muted) return;
+        loopSound(false);
+        img.play().catch(() => {});
+      });
+      return;
+    }
+    img.src = img.dataset.gif;
     if (img.decode) img.decode().then(show, () => {});
     else { img.onload = show; img.onerror = () => {}; }
   }
@@ -182,7 +216,7 @@ export function build() {
   function gifWarm(card) {
     const img = animOf(card);
     if (!img) return;
-    const url = img.dataset.gif;
+    const url = img.dataset.gif;                         // a loop isn't fetched ahead
     if (!url || gifWarmed.has(url)) return;
     gifWarmed.add(url);
 
@@ -211,6 +245,7 @@ export function build() {
     delete img.dataset.playing;
     img.classList.remove("on");
     img.removeAttribute("src");
+    if (img.tagName === "VIDEO") img.load();            // let go of its decoder and its download
   }
 
   function gifPick() {
@@ -218,6 +253,7 @@ export function build() {
     /* Pointer ownership suppresses scroll-based selection until the gesture ends. */
     if (gifPoint) return;
     if (!gifNear.size) return;
+    if (shells.big && !shells.big.sh.hidden) return;     // the open card is what plays (a loop behind it would be heard)
     const doc = document.documentElement;
     const y = scrollY || doc.scrollTop;
 
@@ -284,7 +320,7 @@ export function build() {
 
   function watchCard(w) {
     const c = w && w.querySelector && (w.matches("article.card") ? w : w.querySelector("article.card:not(.compose)"));
-    if (gifObs && c && (c.querySelector("img.anim[data-gif]") || c.querySelector(".vblock[data-audio]"))) {
+    if (gifObs && c && (c.querySelector(ANIM) || c.querySelector(".vblock[data-audio]"))) {
       gifObs.observe(c);
     }
   }
@@ -310,7 +346,7 @@ export function build() {
     }, { rootMargin: "25% 0px 25% 0px", threshold: 0 });
 
     root.querySelectorAll("article.card:not(.compose)").forEach((c) => {
-      if (c.querySelector("img.anim[data-gif]") || c.querySelector(".vblock[data-audio]"))
+      if (c.querySelector(ANIM) || c.querySelector(".vblock[data-audio]"))
         gifObs.observe(c);
     });
     if (!gifOn) {
@@ -389,7 +425,7 @@ export function build() {
   /* The open card always plays: it is the one thing on screen, so the scroll
      rule has nothing left to decide. */
   function playing(media) {
-    const img = media.querySelector && media.querySelector("img.anim[data-gif]");
+    const img = media.querySelector && media.querySelector(ANIM);
     if (img) gifPlay(img);
     return media;
   }
@@ -1319,6 +1355,7 @@ export function build() {
     for (const e of document.querySelectorAll(".vplay.on, .abplay.on")) e.classList.remove("on");
 
     for (const e of document.querySelectorAll(".origpb.on")) e.classList.remove("on");
+    if (loops.sound) loopSound(false);
   }
 
   function scrubbable(block, card, url, pb, repaint, tapSeeks, ver = null) {
@@ -1688,9 +1725,10 @@ export function build() {
     const pick = view != null && (base.views || [])[view];
 
     const m = cardMedia({ ...c, media: pick ? { ...base, still: pick.still || base.still,
-                                                 gif: pick.gif } : base },
+                                                 gif: pick.gif, loop: pick.loop } : base },
                         { w: controls ? 1280 : 360 });
     m.style.position = "relative";
+    if (m.querySelector("video.anim")) m.append(loopSoundBtn());
     return m;
   }
 
@@ -3182,7 +3220,7 @@ export function build() {
       if (listen.card) listen.card.at = null;
       stopAudio();
     }
-    if (kind === "big") { pausePlayer(); stopTrim(); }
+    if (kind === "big") { pausePlayer(); stopTrim(); if (s) for (const v of s.sh.querySelectorAll("video.anim")) gifStop(v); }
 
     if (kind === "big") listen.tick = null;
 

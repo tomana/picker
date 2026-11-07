@@ -70,11 +70,12 @@ update; readers use one format rather than live migrators.
 | `still` | the picture the grid and lists show (png, jpg or webp, any size: the grid asks the picker for a 360 px copy, `?w=360`). A version with a `poster` may leave it out: the grid then shows the poster's copy |
 | `poster` | the full-size frame (1280×720) a video starts from, which the open card shows large |
 | `gif` | a moving picture that plays by itself |
+| `loop` | a short video with its sound (mp4: H.264 and AAC, `+faststart`) that plays as a `gif` does, looping and muted, with a speaker that gives every loop its sound; a version with one plays it instead of its `gif` |
 | `video` | a moving picture with a play button |
 | `audio` | the version's mix |
 | `ab` | an A/B: the version (A), a gap, the reference (B), at one gain, as one file — its `still` then shows that file on the same time axis; `ab_at` says where B starts, `ab_dur` how long it is (a type with `capabilities.ab`) |
 | `reference` | what the version was made to match (the B of `ab`) |
-| a type's own | a visual type may use `views` (`[{slug, still, gif}]`, alternate renders selected by the `face` signal) or `scene`; a show type may use `show` (JSON) and `timeline` (a picture) |
+| a type's own | a visual type may use `views` (`[{slug, still, gif, loop}]`, alternate renders selected by the `face` signal) or `scene`; a show type may use `show` (JSON) and `timeline` (a picture) |
 
 ## A part
 
