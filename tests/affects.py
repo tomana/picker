@@ -26,6 +26,7 @@ NAMED = {                       # a page file → the checks that are about it
     "static/app/player/engine.js": ["fx41", "fx42"],
     "static/app/player/state.js": ["fx41"],
     "static/app/parts/trim.js": ["fx11", "fx42"],
+    "static/app/parts/loopsound.js": ["fx45"],
 }
 SKIP = re.compile(r"^(docs/|README|LICENSE|\.gitignore)")
 PY_ALL = "PY"                   # the whole Python suite

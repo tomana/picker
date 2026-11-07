@@ -17,6 +17,7 @@ import { sessionPct } from "./data.js";
 import { codeView } from "./parts/code.js";
 import { createPlayer, pausePlayer, lanesOf } from "./player/view.js";
 import { ramp, FADE_OUT, FADE_IN } from "./player/engine.js";
+import { loopVoice, stopVoice } from "./parts/loopsound.js";
 
 const PART_BLOCKS = { voice: voiceBlock, node: nodeBlock };
 
@@ -150,13 +151,20 @@ export function build() {
     return x.querySelector ? x.querySelector(ANIM) : null;
   }
 
-  // a loop (media.loop) plays as a gif does, muted; the speaker gives every loop its sound until it is pressed again or
-  // another sound starts
+  // a loop (media.loop) plays as a gif does, muted; the speaker gives every loop its sound (loopsound.js) until it is
+  // pressed again or another sound starts
   const loops = { sound: false };
+  const voice = (v) => loopVoice(v, v.dataset.loop).then((ok) => {
+    if (!ok && loops.sound && v.dataset.playing) v.muted = false;      // no decode: the video's own sound, seams and all
+  });
   function loopSound(on) {
     if (on) stopAudio();                 // one sound at a time; stopAudio mutes the loops, so it goes first
     loops.sound = on;
-    for (const v of document.querySelectorAll("video.anim[data-loop]")) v.muted = !on;
+    if (!on) stopVoice();
+    for (const v of document.querySelectorAll("video.anim[data-loop]")) {
+      v.muted = true;
+      if (on && v.dataset.playing) voice(v);
+    }
     for (const b of document.querySelectorAll(".lsound")) paintLoopSound(b);
   }
   function paintLoopSound(b) {
@@ -196,14 +204,11 @@ export function build() {
     img.dataset.playing = token;
     const show = () => { if (img.dataset.playing === token) img.classList.add("on"); };
     if (img.tagName === "VIDEO") {
-      img.muted = !loops.sound;
+      img.muted = true;
       img.addEventListener("playing", show, { once: true });
       img.src = img.dataset.loop;
-      img.play().catch(() => {           // the browser refused its sound: muted, it starts
-        if (img.dataset.playing !== token || img.muted) return;
-        loopSound(false);
-        img.play().catch(() => {});
-      });
+      img.play().catch(() => {});
+      if (loops.sound) voice(img);
       return;
     }
     img.src = img.dataset.gif;
@@ -245,7 +250,7 @@ export function build() {
     delete img.dataset.playing;
     img.classList.remove("on");
     img.removeAttribute("src");
-    if (img.tagName === "VIDEO") img.load();            // let go of its decoder and its download
+    if (img.tagName === "VIDEO") { stopVoice(img); img.load(); }   // let go of its sound, decoder and download
   }
 
   function gifPick() {
