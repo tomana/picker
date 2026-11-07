@@ -17,12 +17,18 @@ const SPY = () => {
 };
 
 export async function run(log) {
+  // a card made from a recording that goes on past its stretch (a check before may have made one that doesn't)
   const { cards } = await api("/api/cards?type=music");
-  const c = cards.find((x) => x.origin?.span && x.lineage?.parent);
-  assert(c, "a card made from a recording");
-  const span = c.origin.span, dur = (await api(`/api/cards/${c.lineage.parent}`)).versions[0].duration;
-  const stretchEnd = span.start + span.dur;
-  assert(stretchEnd < dur - 2, `the recording goes on past the stretch: ${span.start}+${span.dur} of ${dur}`);
+  let c = null, span = null, dur = 0, stretchEnd = 0;
+  for (const x of cards.filter((x) => x.origin?.span && x.lineage?.parent)) {
+    const d = (await api(`/api/cards/${x.lineage.parent}`)).versions[0].duration;
+    if (x.origin.span.start + x.origin.span.dur < d - 2) {
+      [c, span, dur] = [x, x.origin.span, d];
+      stretchEnd = span.start + span.dur;
+      break;
+    }
+  }
+  assert(c, "a card made from a recording that goes on past its stretch");
 
   await withPage(async (page, errs) => {
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
