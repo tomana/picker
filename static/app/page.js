@@ -247,10 +247,11 @@ export function build() {
       return;
     }
     if (!img.dataset.playing) return;
+    if (img.tagName === "VIDEO") stopVoice(img);
     delete img.dataset.playing;
     img.classList.remove("on");
     img.removeAttribute("src");
-    if (img.tagName === "VIDEO") { stopVoice(img); img.load(); }   // let go of its sound, decoder and download
+    if (img.tagName === "VIDEO") img.load();             // let go of its decoder and its download
   }
 
   function gifPick() {

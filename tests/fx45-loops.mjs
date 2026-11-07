@@ -15,7 +15,7 @@ async function videos() {
   const out = {};
   for (const [k, hz, src, d] of [["a", 440, "testsrc2", 2], ["b", 660, "smptebars", 3]]) {
     const f = join(dir, `${k}.mp4`);
-    execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", `${src}=s=240x240:d=${d}:r=24`, "-f", "lavfi",
+    execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", `${src}=s=240x240:d=${d}:r=30`, "-f", "lavfi",
       "-i", `sine=f=${hz}:d=${d}`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart",
       "-shortest", f]);
     out[`/zz-loops/${k}.mp4`] = await readFile(f);
@@ -130,18 +130,29 @@ export async function run(log) {
       for (let i = 0; i < h.length; i++) if (h[i] < 1e-3) { let j = i; while (j < h.length && h[j] < 1e-3) j++; runs.push(j - i); i = j; }
       return { blocks: h.length, runs };
     };
-    // the picture against the sound, a dozen times over three seconds: the worst gap between them
-    const step = async () => {
-      let worst = 0;
-      for (let i = 0; i < 12; i++) {
-        const [v, s] = await Promise.all([voice(), state()]);
-        let off = s[0].t - v.at;
-        if (off > v.dur / 2) off -= v.dur; else if (off < -v.dur / 2) off += v.dur;
-        worst = Math.max(worst, Math.abs(off));
-        await sleep(250);
-      }
-      return +worst.toFixed(3);
-    };
+    // each frame shown for `ms` (of whichever player shows: a twin may take turns) against the sound heard as it shows (the
+    // output's own clock): the worst gap, the share within a frame, and the frames kept on screen past their time
+    const step = (ms) => page.evaluate((ms) => new Promise((ok) => {
+      const box = [...document.querySelectorAll("video.anim")].find((x) => !x.paused).parentElement;
+      const n = [...window.__snd.live][0], c = n.context, d = n.buffer.duration, t0 = n.__at.t - n.__at.offset;
+      const offs = [], t1 = performance.now();
+      let last = 0, holds = 0, done = false;
+      const frame = (v) => (_, m) => {
+        if (done) return;
+        if (v.classList.contains("on")) {
+          const o = c.getOutputTimestamp();
+          const at = ((((o.contextTime + (m.expectedDisplayTime - o.performanceTime) / 1000) - t0) % d) + d) % d;
+          let off = m.mediaTime - at;
+          if (off > d / 2) off -= d; else if (off < -d / 2) off += d;
+          offs.push(Math.abs(off));
+          if (last && m.expectedDisplayTime - last > 1.6 * 1000 / 30) holds++;
+          last = m.expectedDisplayTime;
+        }
+        if (performance.now() - t1 < ms) v.requestVideoFrameCallback(frame(v));
+        else { done = true; ok({ worst: +Math.max(...offs).toFixed(3), inFrame: +(offs.filter((x) => x <= 1 / 30).length / offs.length).toFixed(3), holds, n: offs.length }); }
+      };
+      for (const v of box.querySelectorAll("video.anim")) v.requestVideoFrameCallback(frame(v));
+    }), ms);
 
     // a tile at the pointer plays its loop, muted, on and on; one at a time
     await hover(tiles[0]);
@@ -169,8 +180,10 @@ export async function run(log) {
     await sleep(300);
     const g = await gaps(4600);
     eq(g.runs.join(), "", `over two seams of a steady tone, no silence (${g.blocks} blocks)`);
-    const worst = await step();
-    assert(worst < 0.12, `the picture keeps step with the sound: ${worst} s apart at worst`);
+    const st = await step(8000);
+    assert(st.inFrame >= 0.9 && st.worst < 0.09 && st.holds <= 6,
+           `the picture keeps within a frame of the sound, no frames skipped or held: ${JSON.stringify(st)}`);
+    const worst = st.worst;
 
     // the next loop has its sound too; pressed again, none
     const starts = v.starts;
@@ -203,6 +216,6 @@ export async function run(log) {
        "the open card's loop stopped with the sheet");
     await speaker(".grid .lsound.on, .grid .lsound").catch(() => {});
     assert(!errs.length, "page errors: " + errs.slice(0, 4).join(" | "));
-    log(`tiles ${tiles.join(", ")}: one loop at a time, muted; with sound, ${g.blocks} blocks over two seams with no silence, the picture ${worst} s from the sound at worst; ${VIEWS}: ${first.src} then ${s[0].src}, each its own sound`);
+    log(`tiles ${tiles.join(", ")}: one loop at a time, muted; with sound, ${g.blocks} blocks over two seams with no silence, ${(st.inFrame * 100).toFixed(1)}% of ${st.n} frames within a frame of the sound (${worst} s at worst, ${st.holds} held); ${VIEWS}: ${first.src} then ${s[0].src}, each its own sound`);
   });
 }
