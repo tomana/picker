@@ -17,7 +17,7 @@ import { sessionPct } from "./data.js";
 import { codeView } from "./parts/code.js";
 import { createPlayer, pausePlayer, lanesOf } from "./player/view.js";
 import { ramp, FADE_OUT, FADE_IN } from "./player/engine.js";
-import { loopVoice, stopVoice } from "./parts/loopsound.js";
+import { loopSrc, loopsAhead } from "./parts/loopcache.js";
 
 const PART_BLOCKS = { voice: voiceBlock, node: nodeBlock };
 
@@ -119,7 +119,7 @@ export function build() {
       .getPropertyValue("--gif-turn"));
     return v > 0 && v < 1 ? v : 0.3;
   })();
-  let gifObs = null, gifRaf = 0, gifOn = false, gifWait = 0;
+  let gifObs = null, gifRaf = 0, gifOn = false, gifWait = 0, aheadWait = 0;
 
   let SOUND_TURN = 0;
 
@@ -151,20 +151,13 @@ export function build() {
     return x.querySelector ? x.querySelector(ANIM) : null;
   }
 
-  // a loop (media.loop) plays as a gif does, muted; the speaker gives every loop its sound (loopsound.js) until it is
-  // pressed again or another sound starts
+  // a loop (media.loop) plays as a gif does, muted; the speaker gives every loop its own sound until it is pressed
+  // again or another sound starts
   const loops = { sound: false };
-  const voice = (v) => loopVoice(v, v.dataset.loop).then((ok) => {
-    if (!ok && loops.sound && v.dataset.playing) v.muted = false;      // no decode: the video's own sound, seams and all
-  });
   function loopSound(on) {
     if (on) stopAudio();                 // one sound at a time; stopAudio mutes the loops, so it goes first
     loops.sound = on;
-    if (!on) stopVoice();
-    for (const v of document.querySelectorAll("video.anim[data-loop]")) {
-      v.muted = true;
-      if (on && v.dataset.playing) voice(v);
-    }
+    for (const v of document.querySelectorAll("video.anim[data-loop]")) v.muted = !(on && v.dataset.playing);
     for (const b of document.querySelectorAll(".lsound")) paintLoopSound(b);
   }
   function paintLoopSound(b) {
@@ -172,6 +165,14 @@ export function build() {
     b.title = loops.sound ? "mute" : "sound on";
     b.setAttribute("aria-label", b.title);
     b.classList.toggle("on", loops.sound);
+  }
+  // a loop's download: a bar along the foot of its picture while the bytes come (a kept one starts at once)
+  function loadBar(v, share) {
+    const box = v.parentElement;
+    let bar = box && box.querySelector(":scope > .lload");
+    if (share == null) { if (bar) bar.remove(); return; }
+    if (!bar && box) box.append(bar = el("div.lload", {}, [el("i")]));
+    if (bar) bar.firstChild.style.width = `${Math.round(share * 100)}%`;
   }
   function loopSoundBtn() {
     const b = el("button.lsound.no-swipe", { type: "button" });
@@ -206,9 +207,16 @@ export function build() {
     if (img.tagName === "VIDEO") {
       img.muted = true;
       img.addEventListener("playing", show, { once: true });
-      img.src = img.dataset.loop;
-      img.play().catch(() => {});
-      if (loops.sound) voice(img);
+      const url = img.dataset.loop;
+      // whole before it plays: one download for its picture and its sound, and no stall in the middle
+      loopSrc(url, (f) => { if (img.dataset.playing === token) loadBar(img, f); }).catch(() => url).then((src) => {
+        loadBar(img, null);
+        if (img.dataset.playing !== token) return;
+        img.src = src;
+        img.muted = !loops.sound;
+        // a browser that won't start a sound unasked: muted, and the speaker says so
+        img.play().catch(() => { if (!img.muted) { loopSound(false); img.play().catch(() => {}); } });
+      });
       return;
     }
     img.src = img.dataset.gif;
@@ -221,7 +229,8 @@ export function build() {
   function gifWarm(card) {
     const img = animOf(card);
     if (!img) return;
-    const url = img.dataset.gif;                         // a loop isn't fetched ahead
+    if (img.tagName === "VIDEO") { loopsAhead([img.dataset.loop], { first: true }); return; }
+    const url = img.dataset.gif;
     if (!url || gifWarmed.has(url)) return;
     gifWarmed.add(url);
 
@@ -247,7 +256,7 @@ export function build() {
       return;
     }
     if (!img.dataset.playing) return;
-    if (img.tagName === "VIDEO") stopVoice(img);
+    if (img.tagName === "VIDEO") loadBar(img, null);
     delete img.dataset.playing;
     img.classList.remove("on");
     img.removeAttribute("src");
@@ -362,6 +371,10 @@ export function build() {
       watchPointer();
     }
     gifSoon();
+    // the tab's loops onto the device, in the grid's order, once what plays first has had its start
+    clearTimeout(aheadWait);
+    aheadWait = setTimeout(() => loopsAhead([...root.querySelectorAll("video.anim[data-loop]")].map((v) => v.dataset.loop)),
+                           3000);
   }
 
   const POINT_SEL = ".grid article.card:not(.compose)";
@@ -3916,6 +3929,7 @@ export function build() {
       const sc1 = mediaBox.querySelector(".vscroll");
       if (sc1 && keep) sc1.scrollTop = keep;
       viewRow.hidden = vs.length < 2;
+      loopsAhead(vs.map((x) => x.loop), { first: true });
       viewRow.replaceChildren(...(vs.length < 2 ? [] : vs.map((x, i) => {
         const b = el("button.vthumb" + (i === view ? ".on" : ""), { type: "button",
           title: VIEW_NAME[x.slug] || x.slug, "aria-label": VIEW_NAME[x.slug] || x.slug },

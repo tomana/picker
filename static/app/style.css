@@ -572,6 +572,10 @@ body { background:var(--ground) }
 .media:has(> video.anim.on) > .lsound { display:flex }   /* on the loop that plays */
 .lsound.on { background:var(--on); color:var(--on-ink) }
 .sheet .lsound { top:8px; right:8px; width:44px; height:44px }
+.lload { position:absolute; left:0; right:0; bottom:0; z-index:6; height:4px; background:rgba(0,0,0,.5);
+         pointer-events:none }                              /* a loop's download */
+.lload > i { display:block; height:100%; width:0; background:var(--on) }
+.sheet .lload { height:6px }
 
 .cfoot { display:flex; align-items:stretch; font-size:var(--cfs);
          border-top:1px solid var(--edge) }
