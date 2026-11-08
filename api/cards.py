@@ -58,7 +58,7 @@ def _urls(card: dict, cid: str) -> None:
             if k == "views" and isinstance(v, list):
                 # Render slug and face are labels, not media paths.
                 for view in v:
-                    for kk in ("still", "gif"):
+                    for kk in ("still", "gif", "loop"):
                         if kk in view:
                             view[kk] = fix(view[kk])
             else:
@@ -207,12 +207,12 @@ def read_card(cid: str, *, detail: bool = False, d: Path | str | None = None, st
             m = v.get("media") or {}
             pick = next((x for x in m.get("views") or [] if x.get("slug") == face), None)
             if pick:
-                m.update({k: pick[k] for k in ("still", "gif") if pick.get(k)})
+                m.update({k: pick[k] for k in ("still", "gif", "loop") if pick.get(k)})
                 for x in m["views"]:
                     x["face"] = x is pick
         if versions and (versions[-1].get("media") or {}).get("views"):
             card["media"] = {**(card.get("media") or {}),
-                             **{k: versions[-1]["media"][k] for k in ("still", "gif")
+                             **{k: versions[-1]["media"][k] for k in ("still", "gif", "loop")
                                 if versions[-1]["media"].get(k)}}
     # A single-version card has one score: the newer card or version vote.
     if len(versions) == 1:
