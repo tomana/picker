@@ -1900,13 +1900,14 @@ export function build() {
     return b;
   }
 
+  // a named card goes by its name; an unnamed one by its version's own part (a shader's mode), else its id
   function refOf(c, i) {
+    if (namePrefix(c.type) && c.name) return `${namePrefix(c.type)}:${c.name}`;
     const vs = c.versions || [];
     const p0 = vs.length > 1 ? (((vs[i] || {}).parts || [])[0] || {}) : {};
 
     const part = p0.kind !== "voice" ? p0.id : null;
 
-    if (!part && namePrefix(c.type) && c.name) return `${namePrefix(c.type)}:${c.name}`;
     return part && part !== c.id ? part : c.id;
   }
 
