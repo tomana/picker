@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 const SHOTS = process.env.SHOTS;
-export const name = "loops — a card's video plays as a gif does, muted, one at a time; the speaker gives every loop its own sound until pressed again; the open card and its views too (loops given from outside)";
+export const name = "loops — a card's video plays as a gif does, muted, one at a time; the speaker gives every loop its own sound until pressed again; the open card and its views too, swiped on the loop (loops given from outside)";
 
 const VIEWS = "fxvws1";
 
@@ -135,12 +135,20 @@ export async function run(log) {
     await page.$$eval(".sheet.big .vthumb", (bs, i) => bs[i].click(), other);
     s = await until("the other render plays its own loop, with its sound, as the speaker was left",
                     (s) => s.length === 1 && s[0].in === "sheet" && s[0].d !== first.d && s[0].d > 0 && !s[0].muted);
+    const second = s[0];
+    // a swipe on the loop that plays: the render before, again
+    const r = await page.$eval(".sheet.big .cmedia", (b) => { const g = b.getBoundingClientRect(); return { x: g.left, y: g.top + g.height / 2, w: g.width }; });
+    await page.mouse.move(r.x + r.w * 0.8, r.y);
+    await page.mouse.down();
+    for (let i = 1; i <= 6; i++) await page.mouse.move(r.x + r.w * (0.8 - 0.1 * i), r.y);
+    await page.mouse.up();
+    await until("a swipe on the loop: the first render again", (s) => s.length === 1 && s[0].in === "sheet" && s[0].d === first.d);
     await page.evaluate(() => document.querySelector('.scrim[data-kind="big"]').click());
     await sleep(400);
     eq(await page.evaluate(() => [...document.querySelectorAll(".sheet video.anim")].some((v) => !v.paused)), false,
        "the open card's loop stopped with the sheet");
     await speaker(".grid .lsound.on, .grid .lsound").catch(() => {});
     assert(!errs.length, "page errors: " + errs.slice(0, 4).join(" | "));
-    log(`tiles ${tiles.join(", ")}: one loop at a time, muted; the speaker gave each its own sound until pressed again; ${VIEWS}: a ${first.d} s render then a ${s[0].d} s one, each with its sound`);
+    log(`tiles ${tiles.join(", ")}: one loop at a time, muted; the speaker gave each its own sound until pressed again; ${VIEWS}: a ${first.d} s render then a ${second.d} s one, each with its sound, and swiped back`);
   });
 }

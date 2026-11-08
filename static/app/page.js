@@ -181,6 +181,40 @@ export function build() {
     return b;
   }
 
+  // the open card's picture over the whole page (the app's web view has no fullscreen of its own); held upright, a wide
+  // one turns a quarter to fill the phone. Back and Escape leave it before the card.
+  let fullBox = null;
+  const wideIn = (box) => {
+    const i = box.querySelector("img.still"), v = box.querySelector("video.anim");
+    const [w, h] = i && i.naturalWidth ? [i.naturalWidth, i.naturalHeight] : v && v.videoWidth ? [v.videoWidth, v.videoHeight] : [16, 9];
+    return w > h;
+  };
+  const turned = (box) => box.matches(".full.wide") && matchMedia("(orientation:portrait)").matches;
+  function pictureFull(box, on) {
+    fullBox = on ? box : null;
+    box.classList.toggle("full", on);
+    if (on) box.classList.toggle("wide", wideIn(box));
+    for (const b of box.querySelectorAll(".pfull")) paintPictureFull(b);
+  }
+  function paintPictureFull(b) {
+    const on = !!b.closest(".cmedia.full");
+    b.replaceChildren(glyph(on ? "unfull" : "full", 20));
+    b.title = on ? "back to the card" : "the picture, full screen";
+    b.setAttribute("aria-label", b.title);
+  }
+  function pictureFullBtn() {
+    const b = el("button.pfull.no-swipe", { type: "button" });
+    paintPictureFull(b);
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const box = b.closest(".cmedia");
+      if (box) pictureFull(box, !box.classList.contains("full"));
+    };
+    // another view painted while full: its picture may be another shape
+    requestAnimationFrame(() => { const box = b.closest(".cmedia.full"); if (box) pictureFull(box, true); });
+    return b;
+  }
+
   function gifPlay(card) {
     const img = animOf(card);
     if (!img) {
@@ -1748,6 +1782,7 @@ export function build() {
                         { w: controls ? 1280 : 360 });
     m.style.position = "relative";
     if (m.querySelector("video.anim")) m.append(loopSoundBtn());
+    if (controls) m.append(pictureFullBtn());
     return m;
   }
 
@@ -3062,9 +3097,12 @@ export function build() {
         const ex = el("span.scrimx", { "aria-hidden": "true" }, [glyph("cut", 26)]);
         scrim.append(ex);
         const place = () => {
-          const b = sh.getBoundingClientRect().bottom, room = window.innerHeight - b;
-          ex.hidden = sh.hidden || room < 44 || topSheet() !== kind;
-          ex.style.top = `${Math.round(b + room / 2)}px`;
+          const r = sh.getBoundingClientRect(), room = window.innerHeight - r.bottom, side = window.innerWidth - r.right;
+          // beside it when the sheet takes the height (the open card on a phone on its side)
+          const under = room >= 44;
+          ex.hidden = sh.hidden || (!under && side < 44) || topSheet() !== kind;
+          ex.style.top = `${Math.round(under ? r.bottom + room / 2 : window.innerHeight / 2)}px`;
+          ex.style.left = under ? "" : `${Math.round(r.right + side / 2)}px`;
         };
         new ResizeObserver(place).observe(sh);
         window.addEventListener("resize", place);
@@ -3201,6 +3239,8 @@ export function build() {
   let skipPop = 0;
   addEventListener("popstate", () => {
     if (skipPop) { skipPop--; return; }
+    // the card's own entry: it stays, the picture leaves the full screen
+    if (fullBox) { pictureFull(fullBox, false); history.pushState({ sheet: "big" }, ""); return; }
     const k = sheetHist.pop();
     if (k) closeSheet(k, true);
   });
@@ -3240,6 +3280,7 @@ export function build() {
       stopAudio();
     }
     if (kind === "big") { pausePlayer(); stopTrim(); if (s) for (const v of s.sh.querySelectorAll("video.anim")) gifStop(v); }
+    if (kind === "big" && fullBox) pictureFull(fullBox, false);
 
     if (kind === "big") listen.tick = null;
 
@@ -3272,6 +3313,7 @@ export function build() {
     const s = shell(kind);
     sizeSheet(s.sh);
     s.sh.replaceChildren(...nodes);
+    s.sh.scrollTop = 0;                  // the open card on a phone on its side scrolls
 
     if (s.sh.hidden) { sheetHist.push(kind); history.pushState({ sheet: kind }, ""); }
     s.scrim.hidden = false;
@@ -3282,6 +3324,7 @@ export function build() {
      and it costs one listener for the whole page. */
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
+    if (fullBox) { pictureFull(fullBox, false); return; }
     if (walking()) { closeSheet("walk"); return; }
     for (const kind of ["code", "configured", "auto", "idea", "audit", "settings", "cup", "big"]) {
       const s = shells[kind];
@@ -3967,12 +4010,14 @@ export function build() {
     {
       let sx = null, sy = 0, st = 0;
       mediaBox.addEventListener("pointerdown", (e) => {
-        if (viewsOf(sel).length < 2 || e.target.closest("video, .vplay, .vback")) return;
+        if (viewsOf(sel).length < 2 || e.target.closest("video:not(.anim), .vplay, .vback")) return;
         sx = e.clientX; sy = e.clientY; st = Date.now();
       });
       mediaBox.addEventListener("pointerup", (e) => {
         if (sx == null) return;
-        const dx = e.clientX - sx, dy = e.clientY - sy;
+        // turned a quarter, the picture's across is the screen's down
+        const t = turned(mediaBox);
+        const dx = t ? e.clientY - sy : e.clientX - sx, dy = t ? sx - e.clientX : e.clientY - sy;
         sx = null;
         if (Math.abs(dx) < 40 || Math.abs(dx) < 1.5 * Math.abs(dy) || Date.now() - st > 900) return;
         const to = view + (dx < 0 ? 1 : -1);
