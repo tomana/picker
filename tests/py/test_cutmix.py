@@ -246,3 +246,44 @@ class DownloadMade(unittest.TestCase):
         r = cl.get(f"/api/cards/{self.cid}/download?token=../x")
         self.assertEqual(r.headers.getlist("Set-Cookie"), [])
 
+
+
+@unittest.skipUnless(HAVE_FLASK, "needs flask")
+class DownloadLoop(unittest.TestCase):
+    """A version with a loop and no sound of its own downloads its loop's file as it is."""
+
+    def setUp(self):
+        from api import cards as C
+        self.C = C
+        self.root = Path(tempfile.mkdtemp())
+        C.ST.use([self.root / "cards"])
+        C._cache.clear()
+        d = self.root / "cards" / "looptest1"
+        (d / "media").mkdir(parents=True)
+        self.bytes = b"\x00\x00\x00\x18ftypmp42 the loop"
+        (d / "media" / "lt2.mp4").write_bytes(self.bytes)
+        (d / "card.json").write_text(json.dumps({
+            "id": "looptest1", "type": "fx_visual", "media": {}, "versions": [
+                {"n": 1, "id": "v1", "media": {"still": "media/lt1.png"}, "parts": [{"kind": "shader", "id": "lt1"}]},
+                {"n": 2, "id": "v2", "media": {"still": "media/lt2.png", "loop": "media/lt2.mp4"},
+                 "parts": [{"kind": "shader", "id": "lt2"}]}]}))
+
+    def tearDown(self):
+        self.C.ST.use(None)
+        self.C._cache.clear()
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_the_loop_comes_whole_with_its_tokens_cookie(self):
+        from flask import Flask
+        app = Flask(__name__)
+        app.register_blueprint(self.C.bp)
+        cl = app.test_client()
+        r = cl.get("/api/cards/looptest1/download?version=2&token=k3x9")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.mimetype, "video/mp4")
+        self.assertIn("attachment", r.headers["Content-Disposition"])
+        self.assertIn("_v2.mp4", r.headers["Content-Disposition"])
+        self.assertEqual(r.data, self.bytes)
+        self.assertTrue(any(c.startswith("dl_k3x9=1") for c in r.headers.getlist("Set-Cookie")))
+        r.close()
+        self.assertEqual(cl.get("/api/cards/looptest1/download?version=1").status_code, 404)   # no loop, no sound

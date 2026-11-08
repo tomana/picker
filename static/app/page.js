@@ -4626,11 +4626,16 @@ export function build() {
     { const ps = paintSplit; paintSplit = () => { ps(); paintCropBtn(); }; }
     paintCropBtn();
 
-    const dlBtn = el("button", { type: "button", title: "download as .m4a — this version, as you hear it" },
+    // a card with sound downloads it as an .m4a; one without, its loop's file as it is
+    const hasSound = (v) => (v.media || {}).audio || (v.parts || []).some((p) => p.audio);
+    const anySound = (c.versions || []).some(hasSound);
+    const dlBtn = el("button", { type: "button", title: anySound ? "download as .m4a — this version, as you hear it"
+                                                              : "download as .mp4 — this version's loop, picture and sound" },
                      glyph("download", 18));
-    dlBtn.hidden = !(c.versions || []).some((v) => (v.media || {}).audio || (v.parts || []).some((p) => p.audio));
+    dlBtn.hidden = !anySound && !(c.versions || []).some((v) => (v.media || {}).loop);
     dlBtn.onclick = () => {
       const v = (c.versions || [])[sel] || {};
+      if (!hasSound(v) && !(v.media || {}).loop) { toast("this version has no loop to download"); return; }
       const q = new URLSearchParams();
       if (n > 1) q.set("version", v.n ?? sel + 1);
 
@@ -4647,7 +4652,7 @@ export function build() {
       q.set("token", token);
       const a = el("a", { href: `/api/cards/${encodeURIComponent(c.id)}/download?${q}`, download: "" });
       document.body.append(a); a.click(); a.remove();
-      toast(`making the .m4a${q.has("bands") ? " (without the muted bands)" : ""}…`);
+      toast(hasSound(v) ? `making the .m4a${q.has("bands") ? " (without the muted bands)" : ""}…` : "the loop's .mp4…");
       dlBtn.classList.add("busy");
       const t0 = Date.now();
       const poll = setInterval(() => {

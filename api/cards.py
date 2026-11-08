@@ -477,7 +477,8 @@ def by_name(name: str, type_: str) -> str | None:
 
 @bp.get("/api/cards/<cid>/download")
 def download(cid):
-    """Export the played version, selected bands or recording trim as on-demand AAC in an m4a.
+    """Export the played version, selected bands or recording trim as on-demand AAC in an m4a; a version with a loop
+    and no sound of its own gives its loop's file as it is (picture and sound).
     Do not cache downloads; browser decoding constraints do not apply to files."""
     import subprocess
     import tempfile
@@ -496,6 +497,15 @@ def download(cid):
     parts = [p for p in v.get("parts") or [] if p.get("audio")]
     want = [b for b in (request.args.get("bands") or "").split(",") if b]
     mix = (v.get("media") or {}).get("audio")
+    prefix = CONFIG.manifest(raw.get("type")).get("name_prefix")
+    name = f"{prefix}_{raw['name']}" if prefix and raw.get("name") else cid
+    tag = f"_v{v.get('n')}" if len(vs) > 1 else ""
+    loop = (v.get("media") or {}).get("loop")
+    if not mix and not parts and isinstance(loop, str) and not loop.startswith(("/", "http")):
+        f = d / "media" / _safe(loop.split("/")[-1])
+        if not f.exists():
+            abort(404, description="its loop is missing")
+        return _made(send_file(f, mimetype="video/mp4", as_attachment=True, download_name=f"{name}{tag}.mp4"))
     if want:
         srcs = [d / p["audio"] for p in parts if p.get("id") in want]
     else:
@@ -520,15 +530,15 @@ def download(cid):
         data = out.read_bytes()
     finally:
         out.unlink(missing_ok=True)
-    prefix = CONFIG.manifest(raw.get("type")).get("name_prefix")
-    name = f"{prefix}_{raw['name']}" if prefix and raw.get("name") else cid
-    tag = f"_v{v.get('n')}" if len(vs) > 1 else ""
     if want and len(want) < len(parts):
         tag += "_no-" + "-".join(p["id"] for p in parts if p.get("id") not in want)[:60]
     if start or end:
         tag += f"_{start or 0:.0f}-{end:.0f}s" if end else f"_{start:.0f}s-"
-    resp = send_file(BytesIO(data), mimetype="audio/mp4", as_attachment=True, download_name=f"{name}{tag}.m4a")
-    # the page's download link names a token; this cookie tells it the file is made (its spinner stops)
+    return _made(send_file(BytesIO(data), mimetype="audio/mp4", as_attachment=True, download_name=f"{name}{tag}.m4a"))
+
+
+def _made(resp):
+    """The page's download link names a token; this cookie tells it the file is made (its spinner stops)."""
     token = request.args.get("token") or ""
     if re.fullmatch(r"[a-z0-9]{1,16}", token):
         resp.set_cookie(f"dl_{token}", "1", max_age=120, path="/", samesite="Lax")
