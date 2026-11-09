@@ -496,15 +496,22 @@ def download(cid):
         abort(404, description="no such version")
     parts = [p for p in v.get("parts") or [] if p.get("audio")]
     want = [b for b in (request.args.get("bands") or "").split(",") if b]
-    mix = (v.get("media") or {}).get("audio")
+    media = v.get("media") or {}
+    mix = media.get("audio")
     prefix = CONFIG.manifest(raw.get("type")).get("name_prefix")
     name = f"{prefix}_{raw['name']}" if prefix and raw.get("name") else cid
     tag = f"_v{v.get('n')}" if len(vs) > 1 else ""
-    loop = (v.get("media") or {}).get("loop")
+    # the view on the page's screen, else the version's own
+    view = request.args.get("view")
+    shown = next((x for x in media.get("views") or [] if x.get("slug") == view), None) if view else media
+    if shown is None:
+        abort(404, description="no such view")
+    loop = shown.get("loop")
     if not mix and not parts and isinstance(loop, str) and not loop.startswith(("/", "http")):
         f = d / "media" / _safe(loop.split("/")[-1])
         if not f.exists():
             abort(404, description="its loop is missing")
+        tag += f"_{_safe(view)}" if view else ""
         return _made(send_file(f, mimetype="video/mp4", as_attachment=True, download_name=f"{name}{tag}.mp4"))
     if want:
         srcs = [d / p["audio"] for p in parts if p.get("id") in want]

@@ -4630,14 +4630,17 @@ export function build() {
     const hasSound = (v) => (v.media || {}).audio || (v.parts || []).some((p) => p.audio);
     const anySound = (c.versions || []).some(hasSound);
     const dlBtn = el("button", { type: "button", title: anySound ? "download as .m4a — this version, as you hear it"
-                                                              : "download as .mp4 — this version's loop, picture and sound" },
+                                                              : "download as .mp4 — the loop on screen, picture and sound" },
                      glyph("download", 18));
     dlBtn.hidden = !anySound && !(c.versions || []).some((v) => (v.media || {}).loop);
     dlBtn.onclick = () => {
       const v = (c.versions || [])[sel] || {};
-      if (!hasSound(v) && !(v.media || {}).loop) { toast("this version has no loop to download"); return; }
+      // the view on screen, its own loop
+      const shown = !hasSound(v) && view != null ? viewsOf(sel)[view] : null;
+      if (!hasSound(v) && !(shown || v.media || {}).loop) { toast(`this ${shown ? "view" : "version"} has no loop to download`); return; }
       const q = new URLSearchParams();
       if (n > 1) q.set("version", v.n ?? sel + 1);
+      if (shown) q.set("view", shown.slug);
 
       const bands = (v.parts || []).filter((p) => p.audio && p.kind === "voice");
       const off = (p) => p.archived || (!!openNp && openNp.state.muted.includes(p.id));

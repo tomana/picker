@@ -262,10 +262,13 @@ class DownloadLoop(unittest.TestCase):
         (d / "media").mkdir(parents=True)
         self.bytes = b"\x00\x00\x00\x18ftypmp42 the loop"
         (d / "media" / "lt2.mp4").write_bytes(self.bytes)
+        (d / "media" / "lt2.close.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42 the close one")
         (d / "card.json").write_text(json.dumps({
             "id": "looptest1", "type": "fx_visual", "media": {}, "versions": [
                 {"n": 1, "id": "v1", "media": {"still": "media/lt1.png"}, "parts": [{"kind": "shader", "id": "lt1"}]},
-                {"n": 2, "id": "v2", "media": {"still": "media/lt2.png", "loop": "media/lt2.mp4"},
+                {"n": 2, "id": "v2", "media": {"still": "media/lt2.png", "loop": "media/lt2.mp4", "views": [
+                    {"slug": "whole", "still": "media/lt2.png", "loop": "media/lt2.mp4", "face": True},
+                    {"slug": "close", "still": "media/lt2.close.png", "loop": "media/lt2.close.mp4"}]},
                  "parts": [{"kind": "shader", "id": "lt2"}]}]}))
 
     def tearDown(self):
@@ -287,3 +290,15 @@ class DownloadLoop(unittest.TestCase):
         self.assertTrue(any(c.startswith("dl_k3x9=1") for c in r.headers.getlist("Set-Cookie")))
         r.close()
         self.assertEqual(cl.get("/api/cards/looptest1/download?version=1").status_code, 404)   # no loop, no sound
+
+    def test_the_view_on_screen_gives_its_own_loop(self):
+        from flask import Flask
+        app = Flask(__name__)
+        app.register_blueprint(self.C.bp)
+        cl = app.test_client()
+        r = cl.get("/api/cards/looptest1/download?version=2&view=close")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data, b"\x00\x00\x00\x18ftypmp42 the close one")
+        self.assertIn("_v2_close.mp4", r.headers["Content-Disposition"])
+        r.close()
+        self.assertEqual(cl.get("/api/cards/looptest1/download?version=2&view=side").status_code, 404)
