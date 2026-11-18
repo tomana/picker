@@ -264,7 +264,7 @@ def cached_catalogue(name: str, *, reg: dict | None = None, path: Path | None = 
     return catalogue(name, reg=reg, discover=False)
 
 
-_EFFORT_SUFFIX = re.compile(r"-(low|medium|high)$")
+_EFFORT_SUFFIX = re.compile(r"-(low|medium|high|xhigh)$")
 
 
 def _version(mid: str) -> tuple:
@@ -277,7 +277,7 @@ def menu(name: str, *, reg: dict | None = None, cat: dict | None = None) -> list
     Omit unmatched slots; absent menu permits the full catalogue. Never start discovery."""
     reg = reg or load()
     models = (cat or cached_catalogue(name, reg=reg)).get("models", [])
-    rank = lambda mid: ({"high": 3, "medium": 2, "low": 1}[m.group(1)]
+    rank = lambda mid: ({"xhigh": 4, "high": 3, "medium": 2, "low": 1}[m.group(1)]
                         if (m := _EFFORT_SUFFIX.search(mid)) else 3)
     out = []
     for slot in spec(name, reg).get("menu") or []:

@@ -348,6 +348,11 @@ class AgentLayer(unittest.TestCase):
         self.assertIn("gemini-4-pro-high", ids("antigravity", cat("gemini-4-pro-high", "gemini-4-pro-low")))
         self.assertEqual(ids("antigravity", cat("claude-opus-5-5-high", "claude-fable-5-1-high")),
                          ["claude-fable-5-1-high"])
+        # xhigh is the top effort
+        self.assertEqual(ids("antigravity", cat("gemini-4-hydrogen-high", "gemini-4-hydrogen-xhigh", "gemini-4-hydrogen-low")),
+                         ["gemini-4-hydrogen-xhigh"])
+        self.assertEqual(ids("claude", cat("claude-fable-5-1", "claude-fable-5-2", "claude-opus-5-5")),
+                         ["claude-opus-5-5", "claude-fable-5-2"])
 
     def test_a_job_can_name_its_model(self):
         """Run the job-selected model; inherit effort only if the stored catalog says the model supports it."""
