@@ -2923,7 +2923,8 @@ export function build() {
       if (!text) { toast("write the idea first"); field.focus(); return; }
       make.disabled = true;
       try {
-        await d.q.add({ type, kind: "seed", text, attachments: staged.slice() });
+        const method = howNow(type, d);
+        await d.q.add({ type, kind: "seed", text, attachments: staged.slice(), ...(method ? { method } : {}) });
         closeSheet("idea");
         toast(`queued: a new ${typeShort(type)} card from your idea`);
         if (refreshQ) { refreshQ(); setTimeout(refreshQ, 1500); }
@@ -2935,7 +2936,7 @@ export function build() {
       const r = await runsWith(type), text = field.value.trim();
       const words = text ? `your words, "${text.length > 90 ? `${text.slice(0, 88)}…` : text}",` : "your words";
       const more = el("button.seesmore", { type: "button", text: "the whole brief ›" });
-      more.onclick = () => { closeBubble(); openConfigured({ type, agent: r.name, kind: "seed" }); };
+      more.onclick = () => { closeBubble(); openConfigured({ type, agent: r.name, kind: "seed", method: howNow(type, d) }); };
       if (r.agent && !guide) guide = guideFiles(type, { agent: r.name, kind: "seed" }).then((fs) => (guide = fs));
       box.replaceChildren(
         el("div", {}, [el("b", { text: "make" }), r.agent
@@ -2951,7 +2952,7 @@ export function build() {
 
     openSheet("idea", el("div.shead", {}, [el("div.t", { text: `Add idea · ${typeShort(type)}` }), closeBtn("idea")]),
               host, foot);
-    host.replaceChildren(field, strip);
+    host.replaceChildren(...[field, strip, howRow(type, d)].filter(Boolean));
     const sh = shell("idea").sh;
     if (!matchMedia("(hover:hover) and (pointer:fine)").matches) {
       const band = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--band")) || 0;
@@ -3661,10 +3662,42 @@ export function build() {
     return ms;
   };
   const keepFocus = (b) => b.addEventListener("mousedown", (ev) => ev.preventDefault());
+  /* A type's ways of doing a job (docs/TYPES.md `methods`), its tuning aside (that has its own button). The choice is the
+     type's on this device, one for every send from it (an open card's, Add idea's); AUTO keeps the type's default. */
+  const howPicked = {};
+  const waysOf = (type, d) => ((d.typeMethods || {})[type] || []).filter((m) => m && m.id && !m.tuning);
+  const howNow = (type, d) => {
+    const ws = waysOf(type, d);
+    let k = howPicked[type];
+    if (k == null) try { k = localStorage.getItem(`sendHow.${type}`); } catch (_) {}
+    return (ws.find((m) => m.id === k) || ws.find((m) => m.id === (d.typeMethodDefault || {})[type]) || ws[0] || {}).id || null;
+  };
+  function howRow(type, d) {
+    const ws = waysOf(type, d);
+    if (ws.length < 2) return null;
+    const box = el("div.howrow", { role: "radiogroup", "aria-label": "method" });
+    const paint = () => {
+      const on = howNow(type, d);
+      box.replaceChildren(el("span.howlbl", { text: "by" }), ...ws.map((m) => {
+        const b = el("button.howm" + (m.id === on ? ".on" : ""), { type: "button", role: "radio", "aria-checked": String(m.id === on),
+                                                               text: m.label || m.id, title: m.about || m.id, "data-method": m.id });
+        b.onclick = (ev) => {
+          ev.stopPropagation();
+          howPicked[type] = m.id;
+          try { localStorage.setItem(`sendHow.${type}`, m.id); } catch (_) {}
+          paint();
+        };
+        keepFocus(b);
+        return b;
+      }));
+    };
+    paint();
+    return box;
+  }
   /* The picker itself, one component: an optional head (with an ⓘ), the agents as tabs, the shown agent's models as
      rows. `lit(a)` is the model lit for agent a; a tab tap shows that agent (`onTab` hears it), a model tap picks it.
      `tab(a)` gives a tab's text and title. A stub agent (its models not loaded yet) shows no rows. */
-  function agentPicker({ title = null, list, cur, lit, onPick, info = null, onTab = null, inline = false,
+  function agentPicker({ title = null, list, cur, lit, onPick, info = null, onTab = null, inline = false, extra = null,
                          tab = (a) => ({ text: a.cli || a.name, title: a.label || a.name }) }) {
     const box = el("div.whopick" + (inline ? ".inline" : ""));
     const paint = () => {
@@ -3692,7 +3725,7 @@ export function build() {
         keepFocus(about);
       }
       box.replaceChildren(...[title || about ? el("div.whohead", {}, [el("span", { text: title || "" }), about].filter(Boolean)) : null,
-        tabs, rows.length ? el("div.whoms", {}, rows) : null, unlisted].filter(Boolean));
+        extra, tabs, rows.length ? el("div.whoms", {}, rows) : null, unlisted].filter(Boolean));
     };
     paint();
     box.reload = (next, show) => { list = next; cur = show; paint(); };
@@ -3701,9 +3734,9 @@ export function build() {
   }
   /* …as a popover above (or below) a button: an open card's revise and inspire, a job's resume and retry. A second tap
      on the button shuts it; so does a pick. */
-  function agentMenu(btn, { title, list, cur, lit, onPick, info = null }) {
+  function agentMenu(btn, { title, list, cur, lit, onPick, info = null, extra = null }) {
     closeAgentMenu();
-    menuPop = el("div.revpop.whopop", { role: "dialog", "aria-label": title }, [agentPicker({ title, list, cur, lit,
+    menuPop = el("div.revpop.whopop", { role: "dialog", "aria-label": title }, [agentPicker({ title, list, cur, lit, extra,
       info: info && { title: info.title, open: (a, m) => { closeAgentMenu(); info.open(a, m); } },
       onPick: (a, m) => { closeAgentMenu(); onPick(a, m); } })]);
     menuBtn = btn;
@@ -4388,11 +4421,12 @@ export function build() {
       const base = { ...(shownTrim ? { trim: shownTrim } : {}), ...(shownItem ? { item: shownItem } : {}) };
 
       const meths = (d.typeMethods || {})[c.type] || [];
-      const method = how ? how.id : (d.typeMethodDefault || {})[c.type] || (meths[0] || {}).id || null;
+      const method = how ? how.id : howNow(c.type, d) || (d.typeMethodDefault || {})[c.type] || (meths[0] || {}).id || null;
+      const way = !how && waysOf(c.type, d).length > 1 ? waysOf(c.type, d).find((m) => m.id === method) : null;
       const N = howMany();
       const ok = await spawn(kind, c, text, files.map((f) => f.url), vnum,
                              { ...base, ...(method ? { method } : {}), ...(N > 1 ? { count: N } : {}), ...(who || {}) });
-      const label = `${how ? how.label || how.id : kind}${N > 1 ? ` ×${N}` : ""}${who ? ` · ${[who.backend, who.model].filter(Boolean).join(" · ")}` : ""}`;
+      const label = `${how ? how.label || how.id : kind}${way ? ` by ${way.label || way.id}` : ""}${N > 1 ? ` ×${N}` : ""}${who ? ` · ${[who.backend, who.model].filter(Boolean).join(" · ")}` : ""}`;
       if (ok === false) {
         if (text && !draftGet(c.id)) draftSet(c.id, text);
         toast(`NOT queued: ${label}${text ? " — your words are back on the card" : ""}`
@@ -4474,7 +4508,7 @@ export function build() {
       const { list, last, cur } = await whoNow();
       const word = how ? how.label || how.id : kind;
       if (!list.length) return send(kind, null, how)();
-      agentMenu(btn, { title: `${word} with`, list, cur,
+      agentMenu(btn, { title: `${word} with`, list, cur, extra: how ? null : howRow(c.type, d),
         lit: (a) => (a.name === last.agent && "model" in last ? last.model ?? null : (a.choice || {}).model ?? null),
         onPick: (a, model) => {
           try { localStorage.setItem(whoKey, JSON.stringify({ agent: a.name, model })); } catch (_) {}
@@ -4483,7 +4517,7 @@ export function build() {
         info: { title: (a) => `what this ${word} would run with ${a.name}, as configured`,
                 open: (a, model) => openConfigured({ type: c.type, agent: a.name, kind, word, card: c.id,
                                                      version: onScreen().vnum, item: onScreen().item,
-                                                     method: how ? how.id : null, model }) } });
+                                                     method: how ? how.id : howNow(c.type, d), model }) } });
     };
     ins.onclick = ask("inspire", ins);
     rev.onclick = ask("revise", rev);

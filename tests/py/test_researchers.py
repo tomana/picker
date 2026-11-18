@@ -1166,6 +1166,58 @@ class VersionNumberTest(PauseRouteTest):
 
 
 
+class MethodTest(VersionNumberTest):
+    """A send's method is its row's; none sent stays none (the runner resolves the default); an undeclared one is 400."""
+
+    WAYS = [{"id": "plain", "label": "plain"}, {"id": "quick", "label": "quick"},
+            {"id": "tune", "label": "tune", "tuning": True}]
+
+    def setUp(self):
+        super().setUp()
+        real = self.QA._registry()
+        self.reg = mock.patch.object(self.QA, "_registry", return_value=[
+            {**t, "methods": self.WAYS, "default_method": "plain"} if t["type"] == "fx_music" else t for t in real])
+        self.reg.start()
+
+    def tearDown(self):
+        self.reg.stop()
+        super().tearDown()
+
+    def post(self, **b):
+        return self.c.post("/api/queue", json={"type": "fx_music", "text": "x", **b})
+
+    def test_the_row_carries_the_method_sent(self):
+        for kind in ("seed", "revise", "inspire"):
+            r = self.post(kind=kind, method="quick", **({} if kind == "seed" else {"card": "zzsparse001"}))
+            self.assertEqual(r.status_code, 201, (kind, r.get_json()))
+            self.assertEqual(self.Q.get(r.get_json()["id"])["method"], "quick", kind)
+        j = self.Q.get(self.post(kind="revise", card="zzsparse001", method="quick", count=3).get_json()["id"])
+        self.assertEqual((j["method"], j["count"]), ("quick", 3))
+
+    def test_none_sent_stays_none_and_a_row_from_before_methods_folds(self):
+        r = self.post(kind="seed")
+        self.assertIsNone(self.Q.get(r.get_json()["id"])["method"])
+        with open(self.Q.QUEUE, "a") as f:
+            f.write(json.dumps({"event": "enqueue", "id": "oldjob000001", "created": 1.0, "type": "fx_music",
+                                "kind": "seed", "card": None, "text": "old", "backend": None, "group": None,
+                                "attachments": []}) + "\n")
+        old = self.Q.get("oldjob000001")
+        self.assertEqual((old["status"], old["method"]), ("queued", None))
+        self.assertEqual(self.c.get("/api/queue").status_code, 200)
+
+    def test_an_undeclared_method_is_refused(self):
+        for bad in ("nope", "", 5, ["quick"], {"id": "quick"}):
+            self.assertEqual(self.post(kind="seed", method=bad).status_code, 400, bad)
+        self.assertEqual(len(self.Q.fold()), 0, "nothing queued")
+
+    def test_a_retry_on_another_agent_keeps_the_method(self):
+        jid = self.post(kind="seed", method="quick", backend="claude").get_json()["id"]
+        self.Q.defer(jid, agent="claude", until=time.time() + 600, why="held")
+        self.assertEqual(self.c.post(f"/api/queue/{jid}/retry", json={"agent": "codex"}).status_code, 200)
+        j = self.Q.get(jid)
+        self.assertEqual((j["backend"], j["method"]), ("codex", "quick"))
+
+
 class CountTest(PauseRouteTest):
     """Count requests share one job and agent context; paused jobs may resume under another agent."""
 
@@ -1411,6 +1463,15 @@ class AutoReviseTest(unittest.TestCase):
             three = ["revise", "inspire", "tune"]
             self.assertEqual(self.AU.kind_for("t", three, [j2]), "revise")          # after the last, the first
             self.assertEqual(self.AU.kind_for("t", three, [{**j2, "method": None}]), "inspire")
+
+    def test_auto_sends_the_types_default_method(self):
+        # a type of several ways: AUTO's revise is by its default, whatever a send chose last
+        man = {"methods": [{"id": "plain"}, {"id": "quick"}], "default_method": "plain"}
+        with mock.patch.object(self.AU.C, "manifest", lambda t, cfg=None: man if t == "t" else {}), \
+                mock.patch.object(self.AU.C, "types", lambda cfg=None: [{"type": "t", **man}]):
+            self.on()
+            j = self.Q.get(self.tick()[0], root=self.root)
+        self.assertEqual((j["kind"], j["method"]), ("revise", "plain"))
 
     def ptick(self, now=None):
         return self.AU.tick(cards=lambda: self.cards,
